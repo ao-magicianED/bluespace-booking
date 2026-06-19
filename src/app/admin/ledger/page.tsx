@@ -91,7 +91,7 @@ export default async function AdminLedgerPage({
               <th>拠点</th>
               <th>お客様</th>
               <th>会員No</th>
-              <th>回数</th>
+              <th>回数（確定 / 全体）</th>
               <th>人数</th>
               <th>支払</th>
               <th>状態</th>
@@ -116,9 +116,20 @@ export default async function AdminLedgerPage({
                   <td>{b.user_id ? formatMemberNo(memberByUser.get(b.user_id)) : "—"}</td>
                   <td>
                     {rep ? (
-                      <strong className={rep.seq > 1 ? "repeat-badge" : ""}>
-                        {rep.seq}/{rep.total}回
-                      </strong>
+                      <>
+                        <strong className={rep.seq > 1 ? "repeat-badge" : ""}>
+                          {rep.seq > 0 ? `${rep.seq}/${rep.total}回` : `—/${rep.total}回`}
+                        </strong>
+                        {(rep.totalAll > rep.total || rep.cancelled > 0) && (
+                          <>
+                            <br />
+                            <span className="policy">
+                              全{rep.totalAll}件
+                              {rep.cancelled > 0 ? `（キャンセル${rep.cancelled}）` : ""}
+                            </span>
+                          </>
+                        )}
+                      </>
                     ) : (
                       "—"
                     )}

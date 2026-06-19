@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { JST_OFFSET_MS } from "@/lib/slots";
+import MonthlyChart, { type MonthlyData } from "@/components/MonthlyChart";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +89,27 @@ export default async function AdminAnalyticsPage() {
   }
   const monthRows = [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6);
 
+  // ── 月別グラフ用（直近12ヶ月・拠点別含む） ──
+  const venueSet = new Set<string>();
+  const monthVenue = new Map<string, Map<string, { count: number; sales: number }>>();
+  for (const b of rows) {
+    const m = jstMonth(b.start_at);
+    const vname = b.venues?.name ?? "(不明)";
+    venueSet.add(vname);
+    const venueMap = monthVenue.get(m) ?? new Map<string, { count: number; sales: number }>();
+    const cur = venueMap.get(vname) ?? { count: 0, sales: 0 };
+    cur.count++;
+    cur.sales += net(b);
+    venueMap.set(vname, cur);
+    monthVenue.set(m, venueMap);
+  }
+  const sortedMonths = [...monthVenue.keys()].sort().slice(-12); // 古い→新しい
+  const chartData: MonthlyData[] = sortedMonths.map((m) => ({
+    month: m,
+    byVenue: Object.fromEntries((monthVenue.get(m) ?? new Map()).entries()),
+  }));
+  const sortedVenues = [...venueSet].sort();
+
   return (
     <>
       <div className="admin-header">
@@ -157,6 +179,13 @@ export default async function AdminAnalyticsPage() {
           </tbody>
         </table>
       </div>
+
+      <h2 className="analytics-h">📊 月別グラフ（直近12ヶ月・全体／拠点別）</h2>
+      {chartData.length > 0 ? (
+        <MonthlyChart months={chartData} venues={sortedVenues} />
+      ) : (
+        <p className="policy">データがありません。</p>
+      )}
 
       <h2 className="analytics-h">📅 月別推移（直近6ヶ月）</h2>
       <div className="ledger-wrap">

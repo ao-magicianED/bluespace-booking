@@ -1294,6 +1294,135 @@ html {
 .link-button:hover {
   color: var(--navy-900);
 }
+
+/* 月別グラフ（管理画面 / analytics） */
+.monthly-chart {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.25rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-sm);
+}
+.monthly-chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.monthly-chart-toolbar label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.78rem;
+  color: var(--gray-text);
+  font-weight: 600;
+}
+.monthly-chart-toolbar select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  margin-top: 0.2rem;
+  min-width: 180px;
+}
+.metric-toggle {
+  display: inline-flex;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 0.2rem;
+}
+.metric-toggle button {
+  border: none;
+  background: transparent;
+  padding: 0.4rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gray-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.metric-toggle button.active {
+  background: var(--navy-700);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.monthly-chart-totals {
+  margin-left: auto;
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.88rem;
+  color: var(--gray-text);
+}
+.monthly-chart-totals strong {
+  color: var(--navy-900);
+  margin-left: 0.3rem;
+}
+.monthly-chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  height: 260px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4rem;
+  overflow-x: auto;
+}
+.monthly-chart-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+  flex: 1;
+  height: 100%;
+  position: relative;
+}
+.monthly-chart-bar .bar-value {
+  font-size: 0.74rem;
+  color: var(--navy-900);
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+}
+.monthly-chart-bar .bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: linear-gradient(180deg, transparent 0%, #f8fafc 100%);
+  border-radius: 8px 8px 0 0;
+}
+.monthly-chart-bar .bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, var(--coral-500) 0%, var(--coral-600) 60%, var(--navy-700) 100%);
+  border-radius: 6px 6px 0 0;
+  min-height: 2px;
+  transition: height 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.monthly-chart-bar .bar-label {
+  font-size: 0.74rem;
+  color: var(--gray-text);
+  margin-top: 0.4rem;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .monthly-chart-totals {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .monthly-chart-bars {
+    height: 200px;
+  }
+  .monthly-chart-bar {
+    min-width: 36px;
+  }
+  .monthly-chart-bar .bar-value,
+  .monthly-chart-bar .bar-label {
+    font-size: 0.65rem;
+  }
+}
 .admin-btn.danger {
   border-color: #dc2626;
   color: #dc2626;
