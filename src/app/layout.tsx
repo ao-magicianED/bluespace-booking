@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
+import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import AuthNav from "@/components/AuthNav";
 import "./globals.css";
+
+const notoSansJP = Noto_Sans_JP({
+  subsets: ["latin"],
+  weight: ["400", "500", "700", "900"],
+  display: "swap",
+  variable: "--font-jp",
+});
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 
@@ -22,7 +30,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
+    <html lang="ja" className={notoSansJP.variable}>
       <body>
         <header className="site-header">
           <div className="container header-inner">

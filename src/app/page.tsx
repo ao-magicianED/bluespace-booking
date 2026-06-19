@@ -32,7 +32,11 @@ export default async function HomePage() {
   return (
     <>
       <section className="home-hero">
-        <h1>スペースを選んで、そのまま予約</h1>
+        <span className="hero-eyebrow">公式予約・仲介手数料なし</span>
+        <h1>
+          スペースを選んで、<br />
+          <span className="accent">そのまま予約。</span>
+        </h1>
         <p>
           ブルースペースの公式予約サイトです。仲介手数料がかからないため、いつでも最安値。
           空き状況を見て、クレジットカードでそのまま予約が完了します。
@@ -48,9 +52,14 @@ export default async function HomePage() {
       <div className="venue-grid">
         {list.map((v) => {
           const c = getVenueContent(v.slug);
+          const minPrice =
+            v.holiday_hourly_price != null && v.holiday_hourly_price < v.hourly_price
+              ? v.holiday_hourly_price
+              : v.hourly_price;
           return (
             <Link key={v.id} href={`/${v.slug}`} className="venue-card">
               <div className="venue-card-photo">
+                <span className="photo-badge">¥{minPrice.toLocaleString()}〜 / 時間</span>
                 <Image
                   src={`/venues/${v.slug}/hero.jpg`}
                   alt={v.name}
@@ -69,6 +78,7 @@ export default async function HomePage() {
                     : `¥${v.hourly_price.toLocaleString()} / 時間（税込）`}
                 </p>
                 <p className="desc">{v.description}</p>
+                <span className="venue-card-cta">空き状況を見て予約</span>
               </div>
             </Link>
           );
