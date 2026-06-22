@@ -75,9 +75,8 @@ const FAQS = [
     q: "契約は何ヶ月から可能ですか？",
     a: "単月（契約期間の縛りなし）／3ヶ月お試し／6ヶ月／1年の4プランからお選びいただけます。長くお使いいただくほど月額単価が下がり、1年プランは月額158,000円（税込）まで割引されます。",
   },
-  {
     q: "初期費用はいくらですか？保証金はありますか？",
-    a: "現在、3ヶ月以上のご契約者様向けに事務手数料0円・保証金0円・鍵代0円の初回限定キャンペーンを実施中です（単月プランは初月のみ事務手数料¥30,000を申し受けます）。業界では一般的な保証金は当施設では不要です。",
+    a: "通常は事務手数料¥200,000＋保証金（家賃1ヶ月分）¥200,000＝計¥400,000を申し受けます。現在、3ヶ月以上のご契約者様向けに、この¥400,000相当を全額免除する初回限定キャンペーンを実施中です。ただし、一度解約後に再契約される場合は通常通り発生します。保証金は退去時に未払い分・原状回復費を差し引いてご返金いたします。",
   },
   {
     q: "見学はできますか？",
@@ -97,7 +96,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: "ブルーストレージ白金高輪｜法人専用・15㎡完全個室ミニ倉庫【限定1室】",
   description:
-    "港区白金3-1-12（白金高輪駅 徒歩7分）の15㎡完全個室ミニ倉庫。EC・サロン・教室・不動産業の『第2バックヤード』に。1年プラン月額158,000円〜・保証金0円・初期費用無料キャンペーン中。24時間スマートロック・法人向け請求書払い対応・限定1室。",
+    "港区白金3-1-12（白金高輪駅 徒歩7分）の15㎡完全個室ミニ倉庫。EC・サロン・教室・不動産業の『第2バックヤード』に。1年プラン月額158,000円〜・初回限定¥400,000相当が無料キャンペーン中。24時間スマートロック・法人向け請求書払い対応・限定1室。",
   alternates: { canonical: PAGE_URL },
   openGraph: {
     url: PAGE_URL,
@@ -218,7 +217,7 @@ export default function StorageShirokaneTakanawaPage() {
             <li>🔑 24時間スマートロック</li>
             <li>📝 単月〜1年／請求書払い可</li>
             <li>💴 1年プラン 158,000円〜（税込）</li>
-            <li>🎉 初回限定 初期費用0円</li>
+            <li>🎉 初回限定 ¥400,000相当が無料</li>
           </ul>
           <div className="storage-hero-cta">
             <a href="#inquiry" className="storage-cta-btn">
@@ -340,35 +339,49 @@ export default function StorageShirokaneTakanawaPage() {
         </div>
         <div className="storage-initial-fee">
           <h3>
-            <span className="campaign-tag">初回限定キャンペーン実施中</span>
+            <span className="campaign-tag">初回限定 ¥400,000 相当が ¥0！</span>
           </h3>
+          <p className="storage-fee-headline">
+            <span className="strike-amount">通常 ¥400,000</span>
+            <span className="big-zero">
+              → <strong>¥0</strong>
+            </span>
+            <span className="fee-headline-sub">（初回限定キャンペーン）</span>
+          </p>
           <div className="storage-fee-grid">
             <div className="storage-fee-card">
               <span className="fee-label">事務手数料</span>
-              <span className="fee-strike">通常 月額1ヶ月分</span>
+              <span className="fee-strike">通常 ¥200,000</span>
               <span className="fee-now">
-                <strong>0円</strong>
+                <strong>¥0</strong>
                 <small>（初回限定）</small>
               </span>
             </div>
             <div className="storage-fee-card">
-              <span className="fee-label">保証金</span>
+              <span className="fee-label">保証金（家賃1ヶ月分）</span>
+              <span className="fee-strike">通常 ¥200,000</span>
               <span className="fee-now">
-                <strong>0円</strong>
-                <small>（業界標準に合わせ廃止）</small>
+                <strong>¥0</strong>
+                <small>（初回限定）</small>
               </span>
             </div>
             <div className="storage-fee-card">
               <span className="fee-label">鍵・カード代</span>
               <span className="fee-now">
-                <strong>0円</strong>
+                <strong>¥0</strong>
                 <small>（スマートロックのため不要）</small>
               </span>
             </div>
           </div>
-          <p className="policy storage-fee-note">
-            ※3ヶ月以上のご契約が初回キャンペーン適用条件です。単月プランは初月のみ事務手数料 ¥30,000（税込）を申し受けます。
-          </p>
+          <ul className="storage-fee-conditions">
+            <li>
+              ※3ヶ月以上のご契約が初回キャンペーン適用条件です（単月プランは対象外）。
+            </li>
+            <li>
+              ※<strong>一度解約後に再契約される場合</strong>は、事務手数料 ¥200,000 と保証金 ¥200,000 を別途申し受けます。
+            </li>
+            <li>※保証金は通常時、退去時に未払い分・原状回復費を差し引いてご返金します。</li>
+          </ul>
         </div>
         <p className="storage-limit-note">
           ※<strong>限定1室</strong>の貸し切り型のため、契約者が決まり次第募集を終了します。

@@ -2511,6 +2511,52 @@ html {
   margin: 0.9rem auto 0;
   max-width: 720px;
 }
+.storage-fee-headline {
+  text-align: center;
+  margin: 0 0 1.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+.storage-fee-headline .strike-amount {
+  font-size: 1rem;
+  color: var(--gray-text);
+  text-decoration: line-through;
+  font-weight: 700;
+}
+.storage-fee-headline .big-zero {
+  font-size: 1.4rem;
+  color: var(--coral-600);
+  font-weight: 700;
+}
+.storage-fee-headline .big-zero strong {
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-left: 0.2rem;
+  color: var(--coral-600);
+}
+.storage-fee-headline .fee-headline-sub {
+  font-size: 0.85rem;
+  color: var(--gray-text);
+  font-weight: 600;
+}
+.storage-fee-conditions {
+  list-style: none;
+  padding: 0;
+  margin: 1.1rem auto 0;
+  max-width: 760px;
+  font-size: 0.85rem;
+  color: var(--gray-text);
+  line-height: 1.7;
+}
+.storage-fee-conditions li {
+  margin-bottom: 0.25rem;
+}
+.storage-fee-conditions strong {
+  color: var(--coral-600);
+}
 .storage-plan {
   position: relative;
   background: #fff;
