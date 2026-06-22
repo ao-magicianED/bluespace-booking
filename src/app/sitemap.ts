@@ -9,6 +9,11 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: SITE, changeFrequency: "weekly", priority: 1 },
+    {
+      url: `${SITE}/storage/shirokane-takanawa`,
+      changeFrequency: "weekly",
+      priority: 0.85,
+    },
     { url: `${SITE}/legal/terms`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE}/legal/privacy`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE}/legal/tokushoho`, changeFrequency: "yearly", priority: 0.2 },
