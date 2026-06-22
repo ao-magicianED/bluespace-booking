@@ -12,7 +12,7 @@ const PLANS = [
   "3ヶ月お試しプラン 月額168,000円（税込・最人気・通常¥200,000）",
   "6ヶ月プラン 月額168,000円（税込・年間 約38万円お得）",
   "1年プラン 月額158,000円（税込・最安・年間 約50万円お得）",
-  "オプション3点セット希望（環境モニタ＋カメラ閲覧＋物損保険・追加¥7,700/月）",
+  "安心パック（3点セット・追加¥10,000/月・途中解約不可）希望",
   "オプションは個別に相談したい",
   "まずは見学・相談だけ",
 ];
@@ -94,7 +94,7 @@ const FAQS = [
   },
   {
     q: "オプションサービスはどんなものがありますか？",
-    a: "任意の月額オプションとして3つご用意しています。①環境モニタリング（温湿度ログ閲覧＋エアコン遠隔操作 月¥3,300）、②防犯カメラ映像閲覧（C200カメラのライブ＋7日分アーカイブ 月¥3,300）、③物損補償オプション保険（火災・水濡れ・盗難補償 月¥2,200）。3点セットなら月¥7,700にお得になります（単品合計¥8,800 → ¥1,100OFF）。契約期間中いつでも追加・解除できます。",
+    a: "任意の月額オプションとして3つご用意しています。①環境モニタリング（温湿度ログ＋エアコン遠隔操作 月¥6,000）、②防犯カメラ映像閲覧（C200カメラのライブ＋7日分アーカイブ 月¥5,500）、③物損補償オプション保険（火災・水濡れ・盗難補償 月¥3,500）。3点セットの『安心パック』なら月¥10,000（単品合計¥15,000 → ¥5,000 OFF）。安心パックは契約期間中の途中解約・単品解除はできません（プラン満了時に継続/解除を判断）。単品契約は翌月反映で柔軟に追加・解除OKです。",
   },
   {
     q: "保管できないものはありますか？",
@@ -347,13 +347,34 @@ export default function StorageShirokaneTakanawaPage() {
           ご希望に応じて、月額オプションをご利用いただけます。<br />
           すべて<strong>任意</strong>ですので、必要なものだけお選びください。
         </p>
+        <div className="storage-options-bundle-hero">
+          <span className="bundle-hero-tag">⭐ おすすめ・3点セット ⭐</span>
+          <h3 className="bundle-hero-title">安心パック</h3>
+          <div className="bundle-hero-price">
+            <span className="bundle-hero-strike">単品合計 ¥15,000</span>
+            <span className="bundle-hero-amount">¥10,000</span>
+            <span className="bundle-hero-unit">/月（税込）</span>
+            <span className="bundle-hero-off">¥5,000 OFF</span>
+          </div>
+          <p className="bundle-hero-desc">
+            環境モニタリング・防犯カメラ閲覧・物損補償保険の3点をセットで。<br />
+            <strong>高額在庫・精密機器・代替不能の備品</strong>を置く法人様におすすめ。
+          </p>
+          <p className="bundle-hero-note">
+            ※安心パックは<strong>契約期間中の途中解約・単品解除はできません</strong>。3ヶ月／6ヶ月／1年プランの満了タイミングで継続/解除をご判断いただきます。
+          </p>
+        </div>
+
+        <p className="policy storage-options-singles-lead">
+          単品で必要なものだけ選ぶことも可能です（単品は月単位で追加・解除OK）。
+        </p>
         <div className="storage-options-grid">
           <div className="storage-option-card">
             <div className="storage-option-tag">人気No.1</div>
             <span className="storage-option-emoji" aria-hidden="true">🌡️</span>
             <h3>環境モニタリング</h3>
             <div className="storage-option-price">
-              <span className="amount">¥3,300</span>
+              <span className="amount">¥6,000</span>
               <span className="unit">/月（税込）</span>
             </div>
             <ul>
@@ -367,7 +388,7 @@ export default function StorageShirokaneTakanawaPage() {
             <span className="storage-option-emoji" aria-hidden="true">📹</span>
             <h3>防犯カメラ映像閲覧</h3>
             <div className="storage-option-price">
-              <span className="amount">¥3,300</span>
+              <span className="amount">¥5,500</span>
               <span className="unit">/月（税込）</span>
             </div>
             <ul>
@@ -381,7 +402,7 @@ export default function StorageShirokaneTakanawaPage() {
             <span className="storage-option-emoji" aria-hidden="true">🛡️</span>
             <h3>物損補償オプション保険</h3>
             <div className="storage-option-price">
-              <span className="amount">¥2,200</span>
+              <span className="amount">¥3,500</span>
               <span className="unit">/月（税込）</span>
             </div>
             <ul>
@@ -392,18 +413,9 @@ export default function StorageShirokaneTakanawaPage() {
             </ul>
           </div>
         </div>
-        <div className="storage-options-bundle">
-          <div className="storage-options-bundle-inner">
-            <span className="bundle-tag">3点セット割</span>
-            <div className="bundle-text">
-              <strong>3オプションまとめて契約で 月額 ¥7,700（税込）</strong>
-              <span className="bundle-strike">単品合計 ¥8,800 から ¥1,100 OFF</span>
-            </div>
-          </div>
-        </div>
         <p className="policy storage-options-note">
-          ※ オプションは契約期間中いつでも追加・解除可能（翌月から反映）。<br />
-          ※ 保険オプションは運営側で加入している施設保険に契約者物品を追加する形式です。詳細条件は契約時にご案内します。
+          ※ 保険オプションは運営側で加入している施設保険に契約者物品を追加する形式です。詳細条件は契約時にご案内します。<br />
+          ※ 単品オプションは翌月反映で追加・解除OK。安心パックは契約期間中の途中解約・単品解除はできません。
         </p>
       </section>
 
