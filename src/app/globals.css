@@ -2331,6 +2331,7 @@ html {
 .storage-features,
 .storage-perks,
 .storage-delivery,
+.storage-options,
 .storage-pricing,
 .storage-uses,
 .storage-spec,
@@ -2343,6 +2344,7 @@ html {
 .storage-features h2,
 .storage-perks h2,
 .storage-delivery h2,
+.storage-options h2,
 .storage-pricing h2,
 .storage-uses h2,
 .storage-spec h2,
@@ -2643,6 +2645,138 @@ html {
 .storage-delivery-note {
   text-align: center;
   max-width: 740px;
+  margin: 1.2rem auto 0;
+  line-height: 1.7;
+}
+
+/* オプションサービス */
+.storage-options-lead {
+  text-align: center;
+  max-width: 720px;
+  margin: -0.6rem auto 1.6rem;
+}
+.storage-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.3rem;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.storage-option-card {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.storage-option-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+.storage-option-tag {
+  position: absolute;
+  top: -12px;
+  right: 18px;
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 900;
+  padding: 0.28rem 0.8rem;
+  border-radius: 999px;
+  box-shadow: var(--shadow-coral);
+  letter-spacing: 0.05em;
+}
+.storage-option-emoji {
+  display: inline-block;
+  font-size: 2rem;
+  margin-bottom: 0.4rem;
+}
+.storage-option-card h3 {
+  margin: 0 0 0.7rem;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--navy-900);
+}
+.storage-option-price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.storage-option-price .amount {
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: var(--coral-600);
+  letter-spacing: -0.01em;
+}
+.storage-option-price .unit {
+  font-size: 0.85rem;
+  color: var(--gray-text);
+  font-weight: 700;
+}
+.storage-option-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  font-size: 0.9rem;
+  color: #374151;
+}
+.storage-option-card ul li::before {
+  content: "✓ ";
+  color: var(--coral-600);
+  font-weight: 900;
+}
+.storage-options-bundle {
+  max-width: 1080px;
+  margin: 1.4rem auto 0;
+}
+.storage-options-bundle-inner {
+  background: linear-gradient(135deg, var(--navy-700), var(--navy-500));
+  color: #fff;
+  border-radius: 14px;
+  padding: 1.2rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: var(--shadow-md);
+}
+.bundle-tag {
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  color: #fff;
+  font-weight: 900;
+  padding: 0.42rem 0.95rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  box-shadow: var(--shadow-coral);
+  white-space: nowrap;
+}
+.bundle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 240px;
+}
+.bundle-text strong {
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+.bundle-text .bundle-strike {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+.storage-options-note {
+  text-align: center;
+  max-width: 760px;
   margin: 1.2rem auto 0;
   line-height: 1.7;
 }
