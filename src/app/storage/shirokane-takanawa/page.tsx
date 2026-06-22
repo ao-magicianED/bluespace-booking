@@ -83,6 +83,14 @@ const FAQS = [
     a: "はい、ぜひお越しください。下のフォームから希望日を添えてお問い合わせください。1〜2営業日以内に日程調整のご返信をします。",
   },
   {
+    q: "Amazonやヤマトなど配送業者からの荷物受取はどうすればいいですか？",
+    a: "推奨は『営業所留めで送ってもらい、契約者様が週1〜2回まとめて運び入れる』運用です。共用部への置き配も可能ですが、小型・低額品の臨時利用に限り推奨しています。スマートロックの暗証番号を配送員に伝える運用は防犯上推奨いたしません。契約後に『配送業者宛て依頼文テンプレ』を含む非公式の運用ガイドをお送りしますので、参考にしてご利用ください（運用と責任は契約者様に帰属します）。",
+  },
+  {
+    q: "ブルースペース（時間貸しの会議室）も使えますか？",
+    a: "はい、倉庫契約期間中は当社運営のレンタルスペース『ブルースペース』全7拠点（白金高輪・上野・京成小岩ほか）を通常価格より10%OFFでご利用いただけます。打ち合わせ・撮影・面接など『倉庫＋会議室』をワンセットでお使いいただけます。",
+  },
+  {
     q: "保管できないものはありますか？",
     a: "居住・宿泊・作業場としての利用、危険物、食品、動植物、生体、現金、貴金属、その他法令で禁止されたものはお断りしています。詳細は契約時にご説明します。",
   },
@@ -209,6 +217,7 @@ export default function StorageShirokaneTakanawaPage() {
             <li>🔑 24時間スマートロック</li>
             <li>🌱 まずは3ヶ月お試し（最人気）</li>
             <li>💴 1年プラン 158,000円／月〜（最安）</li>
+            <li>🏢 ブルースペース会議室 10%OFF優待</li>
             <li>🎉 初回限定 ¥400,000相当が無料</li>
           </ul>
           <div className="storage-hero-cta">
@@ -242,6 +251,40 @@ export default function StorageShirokaneTakanawaPage() {
         </div>
       </section>
 
+      <section className="storage-perks">
+        <h2>ブルーストレージだけの3つの特典</h2>
+        <p className="policy storage-perks-lead">
+          ブルーステージが運営する既存「ブルースペース」7拠点と、長年の運用ノウハウを活かした<br />
+          法人専用のサービスを標準でご用意しています。
+        </p>
+        <div className="storage-perks-grid">
+          <div className="storage-perk">
+            <span className="storage-perk-icon" aria-hidden="true">🏢</span>
+            <h3>ブルースペース会議室の優待利用</h3>
+            <p>
+              倉庫契約期間中、当社運営の<strong>7拠点のレンタルスペース（白金高輪・上野・京成小岩ほか）</strong>を
+              通常価格より <strong>10%OFF</strong> でご利用いただけます。打ち合わせ・撮影・面接で「倉庫＋会議室」がワンセットに。
+            </p>
+          </div>
+          <div className="storage-perk">
+            <span className="storage-perk-icon" aria-hidden="true">💬</span>
+            <h3>法人専属メール・LINEサポート</h3>
+            <p>
+              契約者専用の連絡窓口で、運用相談・配送のご相談・トラブル対応まで
+              <strong>1〜2営業日以内</strong>に必ずご返信。一般のトランクルームでは得られない「相談できる相手」がいる安心感。
+            </p>
+          </div>
+          <div className="storage-perk">
+            <span className="storage-perk-icon" aria-hidden="true">📑</span>
+            <h3>決算月・予算サイクルに合わせた契約調整</h3>
+            <p>
+              法人決算月をまたぐ年契約の請求月調整、複数月一括前払い、年度内予算消化に合わせた契約開始月の前倒し等、
+              <strong>経理ご担当者の手間を減らす個別調整</strong>を承ります。月次の請求書発行も標準対応。
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="storage-features">
         <h2>ブルーストレージ白金高輪の3つの特徴</h2>
         <div className="storage-feature-grid">
@@ -255,6 +298,41 @@ export default function StorageShirokaneTakanawaPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="storage-delivery">
+        <h2>配送・受取の運用について</h2>
+        <p className="policy storage-delivery-lead">
+          ブルーストレージは「スペース貸し」であり、配送業者からの受取はお客様自身でご運用いただくのが大前提です。<br />
+          ただし、運用がスムーズに回るよう、契約後に<strong>非公式の参考資料</strong>として運用ガイドをお送りしています。
+        </p>
+        <div className="storage-delivery-grid">
+          <div className="storage-delivery-card">
+            <span className="storage-delivery-emoji" aria-hidden="true">🚚</span>
+            <strong>営業所留めで受取（推奨）</strong>
+            <p>
+              ヤマト運輸・佐川急便・日本郵便の「営業所留め」で送ってもらい、契約者様が週1〜2回まとめて運び入れる運用が最もトラブルが少ないです。
+            </p>
+          </div>
+          <div className="storage-delivery-card">
+            <span className="storage-delivery-emoji" aria-hidden="true">📦</span>
+            <strong>共用部 置き配（小型・低額品のみ）</strong>
+            <p>
+              ビル1階エントランス前への置き配指定で受け取り、契約者様が後で運び入れる方法。盗難リスクがあるため小型・低額品の臨時利用に限ります。
+            </p>
+          </div>
+          <div className="storage-delivery-card">
+            <span className="storage-delivery-emoji" aria-hidden="true">📝</span>
+            <strong>配送業者宛て依頼文テンプレも提供</strong>
+            <p>
+              送り状の備考欄にコピペで使える「営業所留め依頼文」「時間指定依頼文」を契約後にお渡しします。経験ベースのテンプレで余計なトラブルを未然に防ぎます。
+            </p>
+          </div>
+        </div>
+        <p className="storage-delivery-note policy">
+          ※ 配送業者へのスマートロック暗証番号の伝達は<strong>推奨しておりません</strong>（防犯リスクのため）。<br />
+          ※ 室内および共用部での荷物の紛失・破損・盗難について、運営は責任を負いかねます（契約者様と配送業者間で解決）。
+        </p>
       </section>
 
       <section className="storage-pricing" id="pricing">

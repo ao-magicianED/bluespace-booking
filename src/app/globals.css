@@ -2329,6 +2329,8 @@ html {
 
 .storage-pain,
 .storage-features,
+.storage-perks,
+.storage-delivery,
 .storage-pricing,
 .storage-uses,
 .storage-spec,
@@ -2339,6 +2341,8 @@ html {
 }
 .storage-pain h2,
 .storage-features h2,
+.storage-perks h2,
+.storage-delivery h2,
 .storage-pricing h2,
 .storage-uses h2,
 .storage-spec h2,
@@ -2551,6 +2555,96 @@ html {
 }
 .storage-fee-conditions strong {
   color: var(--coral-600);
+}
+
+/* 3つの特典 */
+.storage-perks-lead {
+  text-align: center;
+  max-width: 720px;
+  margin: -0.6rem auto 1.6rem;
+}
+.storage-perks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.4rem;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.storage-perk {
+  position: relative;
+  background: linear-gradient(180deg, #fff 0%, #fff7ed 100%);
+  border: 1.5px solid var(--coral-100);
+  border-radius: 16px;
+  padding: 1.6rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.storage-perk:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+.storage-perk-icon {
+  display: inline-block;
+  font-size: 2.2rem;
+  margin-bottom: 0.5rem;
+}
+.storage-perk h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--navy-900);
+  line-height: 1.45;
+}
+.storage-perk p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: #374151;
+}
+
+/* 配送について */
+.storage-delivery-lead {
+  text-align: center;
+  max-width: 740px;
+  margin: -0.6rem auto 1.6rem;
+}
+.storage-delivery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.2rem;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.storage-delivery-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.3rem 1.2rem;
+  box-shadow: var(--shadow-sm);
+}
+.storage-delivery-emoji {
+  display: inline-block;
+  font-size: 1.8rem;
+  margin-bottom: 0.4rem;
+}
+.storage-delivery-card strong {
+  display: block;
+  font-weight: 900;
+  color: var(--navy-900);
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+}
+.storage-delivery-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: #374151;
+}
+.storage-delivery-note {
+  text-align: center;
+  max-width: 740px;
+  margin: 1.2rem auto 0;
+  line-height: 1.7;
 }
 .storage-plan {
   position: relative;
