@@ -12,6 +12,8 @@ const PLANS = [
   "3ヶ月お試しプラン 月額168,000円（税込・最人気・通常¥200,000）",
   "6ヶ月プラン 月額168,000円（税込・年間 約38万円お得）",
   "1年プラン 月額158,000円（税込・最安・年間 約50万円お得）",
+  "オプション3点セット希望（環境モニタ＋カメラ閲覧＋物損保険・追加¥7,700/月）",
+  "オプションは個別に相談したい",
   "まずは見学・相談だけ",
 ];
 
@@ -89,6 +91,10 @@ const FAQS = [
   {
     q: "ブルースペース（時間貸しの会議室）も使えますか？",
     a: "はい、倉庫契約期間中は当社運営のレンタルスペース『ブルースペース』全7拠点（白金高輪・上野・京成小岩ほか）を通常価格より10%OFFでご利用いただけます。打ち合わせ・撮影・面接など『倉庫＋会議室』をワンセットでお使いいただけます。",
+  },
+  {
+    q: "オプションサービスはどんなものがありますか？",
+    a: "任意の月額オプションとして3つご用意しています。①環境モニタリング（温湿度ログ閲覧＋エアコン遠隔操作 月¥3,300）、②防犯カメラ映像閲覧（C200カメラのライブ＋7日分アーカイブ 月¥3,300）、③物損補償オプション保険（火災・水濡れ・盗難補償 月¥2,200）。3点セットなら月¥7,700にお得になります（単品合計¥8,800 → ¥1,100OFF）。契約期間中いつでも追加・解除できます。",
   },
   {
     q: "保管できないものはありますか？",
@@ -332,6 +338,72 @@ export default function StorageShirokaneTakanawaPage() {
         <p className="storage-delivery-note policy">
           ※ 配送業者へのスマートロック暗証番号の伝達は<strong>推奨しておりません</strong>（防犯リスクのため）。<br />
           ※ 室内および共用部での荷物の紛失・破損・盗難について、運営は責任を負いかねます（契約者様と配送業者間で解決）。
+        </p>
+      </section>
+
+      <section className="storage-options" id="options">
+        <h2>オプションサービス（任意・月額）</h2>
+        <p className="policy storage-options-lead">
+          ご希望に応じて、月額オプションをご利用いただけます。<br />
+          すべて<strong>任意</strong>ですので、必要なものだけお選びください。
+        </p>
+        <div className="storage-options-grid">
+          <div className="storage-option-card">
+            <div className="storage-option-tag">人気No.1</div>
+            <span className="storage-option-emoji" aria-hidden="true">🌡️</span>
+            <h3>環境モニタリング</h3>
+            <div className="storage-option-price">
+              <span className="amount">¥3,300</span>
+              <span className="unit">/月（税込）</span>
+            </div>
+            <ul>
+              <li>SwitchBot温湿度計のデータをスマホで閲覧</li>
+              <li>エアコンの遠隔操作（オン/オフ・温度）</li>
+              <li>異常値検知時のアラート通知</li>
+              <li>精密機器・革製品・書類保管に最適</li>
+            </ul>
+          </div>
+          <div className="storage-option-card">
+            <span className="storage-option-emoji" aria-hidden="true">📹</span>
+            <h3>防犯カメラ映像閲覧</h3>
+            <div className="storage-option-price">
+              <span className="amount">¥3,300</span>
+              <span className="unit">/月（税込）</span>
+            </div>
+            <ul>
+              <li>室内設置C200カメラのライブ映像</li>
+              <li>過去7日分の映像アーカイブ閲覧</li>
+              <li>動体検知時のスマホ通知</li>
+              <li>高額品・在庫管理の見える化に</li>
+            </ul>
+          </div>
+          <div className="storage-option-card">
+            <span className="storage-option-emoji" aria-hidden="true">🛡️</span>
+            <h3>物損補償オプション保険</h3>
+            <div className="storage-option-price">
+              <span className="amount">¥2,200</span>
+              <span className="unit">/月（税込）</span>
+            </div>
+            <ul>
+              <li>運営側の施設保険に<strong>契約者の物品も対象に追加</strong></li>
+              <li>火災・水濡れ・盗難等の補償</li>
+              <li>補償上限 100万円／1事故</li>
+              <li>EC在庫・電子機器・什器の補償に</li>
+            </ul>
+          </div>
+        </div>
+        <div className="storage-options-bundle">
+          <div className="storage-options-bundle-inner">
+            <span className="bundle-tag">3点セット割</span>
+            <div className="bundle-text">
+              <strong>3オプションまとめて契約で 月額 ¥7,700（税込）</strong>
+              <span className="bundle-strike">単品合計 ¥8,800 から ¥1,100 OFF</span>
+            </div>
+          </div>
+        </div>
+        <p className="policy storage-options-note">
+          ※ オプションは契約期間中いつでも追加・解除可能（翌月から反映）。<br />
+          ※ 保険オプションは運営側で加入している施設保険に契約者物品を追加する形式です。詳細条件は契約時にご案内します。
         </p>
       </section>
 
