@@ -261,7 +261,7 @@ export default function StorageShirokaneTakanawaPage() {
         <h2>料金プラン</h2>
         <p className="policy storage-pricing-lead">
           15㎡（約9畳）を1社まるごと貸し切るプラン。<br />
-          ご利用期間に応じて4つの料金プランからお選びいただけます（すべて税込）。
+          ご利用期間に応じて3つの料金プランからお選びいただけます（すべて税込）。
         </p>
         <div className="storage-pricing-grid">
           <div className="storage-plan featured">
