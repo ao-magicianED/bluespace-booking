@@ -9,10 +9,9 @@ const PAGE_URL = `${SITE}/storage/shirokane-takanawa`;
 const PRODUCT = "ブルーストレージ白金高輪";
 
 const PLANS = [
-  "1年プラン 月額158,000円（税込・年間 約50万円お得）",
+  "3ヶ月お試しプラン 月額168,000円（税込・最人気・通常¥200,000）",
   "6ヶ月プラン 月額168,000円（税込・年間 約38万円お得）",
-  "3ヶ月お試しプラン 月額168,000円（税込・6ヶ月と同価格）",
-  "単月プラン 月額200,000円（税込・契約期間なし）",
+  "1年プラン 月額158,000円（税込・最安・年間 約50万円お得）",
   "まずは見学・相談だけ",
 ];
 
@@ -73,7 +72,7 @@ const FAQS = [
   },
   {
     q: "契約は何ヶ月から可能ですか？",
-    a: "単月（契約期間の縛りなし）／3ヶ月お試し／6ヶ月／1年の4プランからお選びいただけます。長くお使いいただくほど月額単価が下がり、1年プランは月額158,000円（税込）まで割引されます。",
+    a: "3ヶ月お試し／6ヶ月／1年の3プランからお選びいただけます（最低3ヶ月から）。まずは『3ヶ月お試しプラン』で気軽にスタートし、継続される場合はそのまま6ヶ月／1年プランに移行いただけます。1年プランは月額158,000円（税込）まで割引される最安プランです。",
   },
   {
     q: "初期費用はいくらですか？保証金はありますか？",
@@ -138,15 +137,7 @@ const JSON_LD = {
   offers: [
     {
       "@type": "Offer",
-      name: "単月プラン",
-      price: "200000",
-      priceCurrency: "JPY",
-      eligibleDuration: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" },
-      availability: "https://schema.org/LimitedAvailability",
-    },
-    {
-      "@type": "Offer",
-      name: "3ヶ月お試しプラン",
+      name: "3ヶ月お試しプラン（最人気）",
       price: "168000",
       priceCurrency: "JPY",
       eligibleDuration: { "@type": "QuantitativeValue", value: 3, unitCode: "MON" },
@@ -162,7 +153,7 @@ const JSON_LD = {
     },
     {
       "@type": "Offer",
-      name: "1年プラン",
+      name: "1年プラン（最安）",
       price: "158000",
       priceCurrency: "JPY",
       eligibleDuration: { "@type": "QuantitativeValue", value: 12, unitCode: "MON" },
@@ -216,8 +207,8 @@ export default function StorageShirokaneTakanawaPage() {
           <ul className="storage-quick-facts">
             <li>📐 約15㎡（9畳）／1社専用</li>
             <li>🔑 24時間スマートロック</li>
-            <li>📝 単月〜1年／請求書払い可</li>
-            <li>💴 1年プラン 158,000円〜（税込）</li>
+            <li>🌱 まずは3ヶ月お試し（最人気）</li>
+            <li>💴 1年プラン 158,000円／月〜（最安）</li>
             <li>🎉 初回限定 ¥400,000相当が無料</li>
           </ul>
           <div className="storage-hero-cta">
@@ -272,21 +263,9 @@ export default function StorageShirokaneTakanawaPage() {
           15㎡（約9畳）を1社まるごと貸し切るプラン。<br />
           ご利用期間に応じて4つの料金プランからお選びいただけます（すべて税込）。
         </p>
-        <div className="storage-pricing-grid storage-pricing-4col">
-          <div className="storage-plan">
-            <div className="storage-plan-head">単月プラン</div>
-            <div className="storage-plan-price">
-              <span className="amount">¥200,000</span>
-              <span className="unit">/月</span>
-            </div>
-            <ul>
-              <li>契約期間の縛りなし</li>
-              <li>1ヶ月単位で利用可能</li>
-              <li>柔軟に解約OK</li>
-              <li>請求書払い対応</li>
-            </ul>
-          </div>
-          <div className="storage-plan">
+        <div className="storage-pricing-grid">
+          <div className="storage-plan featured">
+            <div className="storage-plan-badge">最人気</div>
             <div className="storage-plan-head">3ヶ月お試しプラン</div>
             <div className="storage-plan-price">
               <span className="amount">¥168,000</span>
@@ -295,11 +274,11 @@ export default function StorageShirokaneTakanawaPage() {
             </div>
             <ul>
               <li>
-                <strong>6ヶ月プランと同価格でお試し</strong>
+                <strong>まずは3ヶ月で気軽にスタート</strong>
               </li>
-              <li>3ヶ月から気軽に開始</li>
-              <li>継続時はそのまま長期プランへ</li>
-              <li>月 ¥32,000 お得</li>
+              <li>長期プランと同じ月額単価でお試し</li>
+              <li>継続時はそのまま6ヶ月／1年プランへ</li>
+              <li>請求書払い対応・解約も柔軟</li>
             </ul>
           </div>
           <div className="storage-plan">
@@ -318,8 +297,8 @@ export default function StorageShirokaneTakanawaPage() {
               <li>請求書払い対応</li>
             </ul>
           </div>
-          <div className="storage-plan featured">
-            <div className="storage-plan-badge">最人気</div>
+          <div className="storage-plan cheapest">
+            <div className="storage-plan-badge cheapest-badge">最安プラン</div>
             <div className="storage-plan-head">1年プラン</div>
             <div className="storage-plan-price">
               <span className="amount">¥158,000</span>
@@ -328,7 +307,7 @@ export default function StorageShirokaneTakanawaPage() {
             </div>
             <ul>
               <li>
-                <strong>もっとも面積単価を抑えられる人気プラン</strong>
+                <strong>もっとも面積単価を抑えられる最安プラン</strong>
               </li>
               <li>
                 年換算で <strong>約 ¥504,000 お得</strong>
@@ -375,13 +354,11 @@ export default function StorageShirokaneTakanawaPage() {
             </div>
           </div>
           <ul className="storage-fee-conditions">
-            <li>
-              ※3ヶ月以上のご契約が初回キャンペーン適用条件です（単月プランは対象外）。
-            </li>
+            <li>※すべてのプラン（3ヶ月お試し／6ヶ月／1年）が初回キャンペーン対象です。</li>
             <li>
               ※<strong>一度解約後に再契約される場合</strong>は、事務手数料 ¥200,000 と保証金 ¥200,000 を別途申し受けます。
             </li>
-            <li>※保証金は通常時、退去時に未払い分・原状回復費を差し引いてご返金します。</li>
+            <li>※保証金は退去時に未払い分・原状回復費を差し引いてご返金します。</li>
           </ul>
         </div>
         <p className="storage-limit-note">

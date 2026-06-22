@@ -2570,6 +2570,15 @@ html {
   background: linear-gradient(180deg, #fff 0%, #fff7ed 100%);
   box-shadow: var(--shadow-md);
 }
+.storage-plan.cheapest {
+  border: 2px solid var(--navy-500);
+  background: linear-gradient(180deg, #fff 0%, #eff6ff 100%);
+  box-shadow: var(--shadow-md);
+}
+.storage-plan-badge.cheapest-badge {
+  background: linear-gradient(135deg, var(--navy-500), var(--navy-700));
+  box-shadow: 0 8px 24px rgba(30, 77, 140, 0.32);
+}
 .storage-plan-badge {
   position: absolute;
   top: -14px;
