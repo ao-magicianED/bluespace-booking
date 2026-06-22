@@ -2688,6 +2688,10 @@ html {
   box-shadow: var(--shadow-coral);
   letter-spacing: 0.05em;
 }
+.storage-option-tag.tag-limited {
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.32);
+}
 .storage-option-emoji {
   display: inline-block;
   font-size: 2rem;
