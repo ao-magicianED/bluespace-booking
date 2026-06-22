@@ -9,8 +9,10 @@ const PAGE_URL = `${SITE}/storage/shirokane-takanawa`;
 const PRODUCT = "ブルーストレージ白金高輪";
 
 const PLANS = [
-  "標準プラン 月額178,000円（税込）",
-  "長期契約プラン 月額158,000円（6ヶ月以上・税込）",
+  "1年プラン 月額158,000円（税込・年間 約50万円お得）",
+  "6ヶ月プラン 月額168,000円（税込・年間 約38万円お得）",
+  "3ヶ月お試しプラン 月額168,000円（税込・6ヶ月と同価格）",
+  "単月プラン 月額200,000円（税込・契約期間なし）",
   "まずは見学・相談だけ",
 ];
 
@@ -28,7 +30,7 @@ const FEATURES = [
   {
     icon: "📝",
     title: "法人向け柔軟契約",
-    body: "最短3ヶ月から契約OK。請求書払いに対応。初期費用は月額1ヶ月分＋保証金1ヶ月分のみ。",
+    body: "最短3ヶ月のお試しから1年契約まで。請求書払い対応・保証金なし・年払い即決割引あり。",
   },
 ];
 
@@ -71,7 +73,11 @@ const FAQS = [
   },
   {
     q: "契約は何ヶ月から可能ですか？",
-    a: "最短3ヶ月からご契約いただけます。6ヶ月以上の長期契約で月額158,000円（税込）の長期割引を適用します。",
+    a: "単月（契約期間の縛りなし）／3ヶ月お試し／6ヶ月／1年の4プランからお選びいただけます。長くお使いいただくほど月額単価が下がり、1年プランは月額158,000円（税込）まで割引されます。",
+  },
+  {
+    q: "初期費用はいくらですか？保証金はありますか？",
+    a: "現在、3ヶ月以上のご契約者様向けに事務手数料0円・保証金0円・鍵代0円の初回限定キャンペーンを実施中です（単月プランは初月のみ事務手数料¥30,000を申し受けます）。業界では一般的な保証金は当施設では不要です。",
   },
   {
     q: "見学はできますか？",
@@ -91,13 +97,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: "ブルーストレージ白金高輪｜法人専用・15㎡完全個室ミニ倉庫【限定1室】",
   description:
-    "港区白金3-1-12（白金高輪駅 徒歩7分）の15㎡完全個室ミニ倉庫。EC・サロン・教室・不動産業の『第2バックヤード』に。月額178,000円（長期158,000円）。スマートロックで24時間入退室可。法人向け請求書払い対応・限定1室。",
+    "港区白金3-1-12（白金高輪駅 徒歩7分）の15㎡完全個室ミニ倉庫。EC・サロン・教室・不動産業の『第2バックヤード』に。1年プラン月額158,000円〜・保証金0円・初期費用無料キャンペーン中。24時間スマートロック・法人向け請求書払い対応・限定1室。",
   alternates: { canonical: PAGE_URL },
   openGraph: {
     url: PAGE_URL,
     title: "ブルーストレージ白金高輪｜法人専用・15㎡完全個室ミニ倉庫【限定1室】",
     description:
-      "白金高輪駅 徒歩7分。15㎡を1社まるごと貸し切り。EC・サロン・教室・不動産の『第2バックヤード』に。月額178,000円〜、24時間スマートロック・除湿機・電源・Wi-Fi完備。",
+      "白金高輪駅 徒歩7分。15㎡を1社まるごと貸し切り。1年プラン月額158,000円・保証金0円・初回限定で事務手数料無料。EC・サロン・教室の『第2バックヤード』に。24時間スマートロック・除湿機・電源・Wi-Fi完備。",
     type: "website",
     locale: "ja_JP",
     siteName: "ブルーストレージ",
@@ -132,18 +138,34 @@ const JSON_LD = {
   offers: [
     {
       "@type": "Offer",
-      name: "標準プラン",
-      price: "178000",
+      name: "単月プラン",
+      price: "200000",
       priceCurrency: "JPY",
       eligibleDuration: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" },
       availability: "https://schema.org/LimitedAvailability",
     },
     {
       "@type": "Offer",
-      name: "長期契約プラン（6ヶ月以上）",
-      price: "158000",
+      name: "3ヶ月お試しプラン",
+      price: "168000",
+      priceCurrency: "JPY",
+      eligibleDuration: { "@type": "QuantitativeValue", value: 3, unitCode: "MON" },
+      availability: "https://schema.org/LimitedAvailability",
+    },
+    {
+      "@type": "Offer",
+      name: "6ヶ月プラン",
+      price: "168000",
       priceCurrency: "JPY",
       eligibleDuration: { "@type": "QuantitativeValue", value: 6, unitCode: "MON" },
+      availability: "https://schema.org/LimitedAvailability",
+    },
+    {
+      "@type": "Offer",
+      name: "1年プラン",
+      price: "158000",
+      priceCurrency: "JPY",
+      eligibleDuration: { "@type": "QuantitativeValue", value: 12, unitCode: "MON" },
       availability: "https://schema.org/LimitedAvailability",
     },
   ],
@@ -194,8 +216,9 @@ export default function StorageShirokaneTakanawaPage() {
           <ul className="storage-quick-facts">
             <li>📐 約15㎡（9畳）／1社専用</li>
             <li>🔑 24時間スマートロック</li>
-            <li>📝 最短3ヶ月／請求書払い可</li>
-            <li>💴 月額 178,000円〜（税込）</li>
+            <li>📝 単月〜1年／請求書払い可</li>
+            <li>💴 1年プラン 158,000円〜（税込）</li>
+            <li>🎉 初回限定 初期費用0円</li>
           </ul>
           <div className="storage-hero-cta">
             <a href="#inquiry" className="storage-cta-btn">
@@ -246,39 +269,106 @@ export default function StorageShirokaneTakanawaPage() {
       <section className="storage-pricing" id="pricing">
         <h2>料金プラン</h2>
         <p className="policy storage-pricing-lead">
-          15㎡（約9畳）を1社まるごと貸し切るため、<br />
-          面積単価を抑えた価格設定にしています（料金は税込）。
+          15㎡（約9畳）を1社まるごと貸し切るプラン。<br />
+          ご利用期間に応じて4つの料金プランからお選びいただけます（すべて税込）。
         </p>
-        <div className="storage-pricing-grid">
+        <div className="storage-pricing-grid storage-pricing-4col">
           <div className="storage-plan">
-            <div className="storage-plan-head">標準プラン</div>
+            <div className="storage-plan-head">単月プラン</div>
             <div className="storage-plan-price">
-              <span className="amount">¥178,000</span>
-              <span className="unit">/月（税込）</span>
+              <span className="amount">¥200,000</span>
+              <span className="unit">/月</span>
             </div>
             <ul>
-              <li>最短3ヶ月から契約OK</li>
-              <li>初期費用：月額1ヶ月分</li>
-              <li>保証金：月額1ヶ月分</li>
+              <li>契約期間の縛りなし</li>
+              <li>1ヶ月単位で利用可能</li>
+              <li>柔軟に解約OK</li>
+              <li>請求書払い対応</li>
+            </ul>
+          </div>
+          <div className="storage-plan">
+            <div className="storage-plan-head">3ヶ月お試しプラン</div>
+            <div className="storage-plan-price">
+              <span className="amount">¥168,000</span>
+              <span className="unit">/月</span>
+              <span className="strike">通常 ¥200,000</span>
+            </div>
+            <ul>
+              <li>
+                <strong>6ヶ月プランと同価格でお試し</strong>
+              </li>
+              <li>3ヶ月から気軽に開始</li>
+              <li>継続時はそのまま長期プランへ</li>
+              <li>月 ¥32,000 お得</li>
+            </ul>
+          </div>
+          <div className="storage-plan">
+            <div className="storage-plan-head">6ヶ月プラン</div>
+            <div className="storage-plan-price">
+              <span className="amount">¥168,000</span>
+              <span className="unit">/月</span>
+              <span className="strike">通常 ¥200,000</span>
+            </div>
+            <ul>
+              <li>半年腰を据えて利用したい方に</li>
+              <li>
+                <strong>年換算で約 ¥384,000 お得</strong>
+              </li>
+              <li>更新・延長OK</li>
               <li>請求書払い対応</li>
             </ul>
           </div>
           <div className="storage-plan featured">
-            <div className="storage-plan-badge">おすすめ</div>
-            <div className="storage-plan-head">長期契約プラン</div>
+            <div className="storage-plan-badge">最人気</div>
+            <div className="storage-plan-head">1年プラン</div>
             <div className="storage-plan-price">
               <span className="amount">¥158,000</span>
-              <span className="unit">/月（税込）</span>
+              <span className="unit">/月</span>
+              <span className="strike">通常 ¥200,000</span>
             </div>
             <ul>
               <li>
-                <strong>6ヶ月以上の契約で20,000円/月OFF</strong>
+                <strong>もっとも面積単価を抑えられる人気プラン</strong>
               </li>
-              <li>年間 240,000円お得</li>
-              <li>初期費用・保証金は同条件</li>
-              <li>更新・解約はいつでもご相談可</li>
+              <li>
+                年換算で <strong>約 ¥504,000 お得</strong>
+              </li>
+              <li>請求書払い・分割払い相談可</li>
+              <li>更新は同条件で継続可</li>
             </ul>
           </div>
+        </div>
+        <div className="storage-initial-fee">
+          <h3>
+            <span className="campaign-tag">初回限定キャンペーン実施中</span>
+          </h3>
+          <div className="storage-fee-grid">
+            <div className="storage-fee-card">
+              <span className="fee-label">事務手数料</span>
+              <span className="fee-strike">通常 月額1ヶ月分</span>
+              <span className="fee-now">
+                <strong>0円</strong>
+                <small>（初回限定）</small>
+              </span>
+            </div>
+            <div className="storage-fee-card">
+              <span className="fee-label">保証金</span>
+              <span className="fee-now">
+                <strong>0円</strong>
+                <small>（業界標準に合わせ廃止）</small>
+              </span>
+            </div>
+            <div className="storage-fee-card">
+              <span className="fee-label">鍵・カード代</span>
+              <span className="fee-now">
+                <strong>0円</strong>
+                <small>（スマートロックのため不要）</small>
+              </span>
+            </div>
+          </div>
+          <p className="policy storage-fee-note">
+            ※3ヶ月以上のご契約が初回キャンペーン適用条件です。単月プランは初月のみ事務手数料 ¥30,000（税込）を申し受けます。
+          </p>
         </div>
         <p className="storage-limit-note">
           ※<strong>限定1室</strong>の貸し切り型のため、契約者が決まり次第募集を終了します。

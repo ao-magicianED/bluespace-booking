@@ -2425,6 +2425,92 @@ html {
   max-width: 800px;
   margin: 0 auto;
 }
+.storage-pricing-grid.storage-pricing-4col {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  max-width: 1120px;
+  gap: 1.1rem;
+}
+.storage-plan-price .strike {
+  display: block;
+  width: 100%;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--gray-text);
+  text-decoration: line-through;
+  margin-top: 0.15rem;
+}
+.storage-initial-fee {
+  max-width: 1120px;
+  margin: 2rem auto 0;
+  background: linear-gradient(180deg, #fff7ed 0%, #fff 100%);
+  border: 1.5px solid var(--coral-500);
+  border-radius: 18px;
+  padding: 1.6rem 1.4rem;
+  box-shadow: var(--shadow-md);
+}
+.storage-initial-fee > h3 {
+  margin: 0 0 1.1rem;
+  text-align: center;
+  font-size: 1.05rem;
+}
+.campaign-tag {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  color: #fff;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  box-shadow: var(--shadow-coral);
+}
+.storage-fee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.85rem;
+}
+.storage-fee-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.storage-fee-card .fee-label {
+  font-size: 0.85rem;
+  color: var(--gray-text);
+  font-weight: 700;
+}
+.storage-fee-card .fee-strike {
+  font-size: 0.78rem;
+  color: var(--gray-text);
+  text-decoration: line-through;
+}
+.storage-fee-card .fee-now {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0.2rem;
+}
+.storage-fee-card .fee-now strong {
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: var(--coral-600);
+  line-height: 1;
+}
+.storage-fee-card .fee-now small {
+  font-size: 0.75rem;
+  color: var(--gray-text);
+  margin-top: 0.15rem;
+}
+.storage-fee-note {
+  text-align: center;
+  margin: 0.9rem auto 0;
+  max-width: 720px;
+}
 .storage-plan {
   position: relative;
   background: #fff;
