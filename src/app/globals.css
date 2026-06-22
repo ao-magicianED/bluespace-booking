@@ -2780,6 +2780,121 @@ html {
   margin: 1.2rem auto 0;
   line-height: 1.7;
 }
+
+/* 安心パック（ヒーロー扱い） */
+.storage-options-bundle-hero {
+  position: relative;
+  max-width: 760px;
+  margin: 0 auto 2rem;
+  background: linear-gradient(135deg, #0f2d5c 0%, #1a3a6c 50%, #1e4d8c 100%);
+  color: #fff;
+  border-radius: 22px;
+  padding: 2.4rem 1.8rem 1.8rem;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.storage-options-bundle-hero::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -10%;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.32) 0%, transparent 60%);
+  pointer-events: none;
+}
+.storage-options-bundle-hero::after {
+  content: "";
+  position: absolute;
+  bottom: -50%;
+  left: -10%;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(96, 165, 250, 0.18) 0%, transparent 65%);
+  pointer-events: none;
+}
+.storage-options-bundle-hero > * {
+  position: relative;
+  z-index: 1;
+}
+.bundle-hero-tag {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  color: #fff;
+  font-weight: 900;
+  padding: 0.4rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  box-shadow: var(--shadow-coral);
+  margin-bottom: 0.7rem;
+}
+.bundle-hero-title {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+.bundle-hero-price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+.bundle-hero-strike {
+  font-size: 0.88rem;
+  opacity: 0.78;
+  text-decoration: line-through;
+}
+.bundle-hero-amount {
+  font-size: clamp(2.8rem, 5vw, 3.6rem);
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+.bundle-hero-unit {
+  font-size: 0.95rem;
+  opacity: 0.88;
+  font-weight: 700;
+}
+.bundle-hero-off {
+  display: inline-block;
+  margin-top: 0.5rem;
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  color: #fff;
+  font-weight: 900;
+  font-size: 0.95rem;
+  padding: 0.36rem 1.1rem;
+  border-radius: 999px;
+  box-shadow: var(--shadow-coral);
+  letter-spacing: 0.02em;
+}
+.bundle-hero-desc {
+  margin: 0.5rem auto 1rem;
+  max-width: 580px;
+  font-size: 0.96rem;
+  line-height: 1.7;
+  opacity: 0.94;
+}
+.bundle-hero-note {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.84;
+  line-height: 1.65;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  display: inline-block;
+}
+.storage-options-singles-lead {
+  text-align: center;
+  margin: 0 auto 1rem;
+  max-width: 640px;
+}
 .storage-plan {
   position: relative;
   background: #fff;
