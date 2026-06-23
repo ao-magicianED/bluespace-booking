@@ -348,6 +348,12 @@ export default function StorageShirokaneTakanawaPage() {
           ご希望に応じて、月額オプションをご利用いただけます。<br />
           すべて<strong>任意</strong>ですので、必要なものだけお選びください。
         </p>
+
+        <h3 className="storage-options-subhead">
+          <span className="storage-options-subhead-num">A.</span>
+          セキュリティ＆補償オプション
+          <small>― セットがお得、単品契約もOK</small>
+        </h3>
         <div className="storage-options-bundle-hero">
           <span className="bundle-hero-tag">⭐ おすすめ・3点セット ⭐</span>
           <h3 className="bundle-hero-title">安心パック</h3>
@@ -367,8 +373,7 @@ export default function StorageShirokaneTakanawaPage() {
         </div>
 
         <p className="policy storage-options-singles-lead">
-          単品で必要なものだけ選ぶことも可能です（単品は月単位で追加・解除OK）。<br />
-          作業台が必要な方は「机・椅子レンタル」もご利用ください。
+          下記3点は単品でもご契約いただけます（単品は月単位で追加・解除OK）。
         </p>
         <div className="storage-options-grid">
           <div className="storage-option-card">
@@ -414,20 +419,31 @@ export default function StorageShirokaneTakanawaPage() {
               <li>EC在庫・電子機器・什器の補償に</li>
             </ul>
           </div>
-          <div className="storage-option-card">
+        </div>
+
+        <h3 className="storage-options-subhead storage-options-subhead-furniture">
+          <span className="storage-options-subhead-num">B.</span>
+          設備レンタルオプション
+          <small>― 作業スペース化したい方へ</small>
+        </h3>
+        <div className="storage-options-grid storage-options-grid-furniture">
+          <div className="storage-option-card storage-option-card-furniture">
             <div className="storage-option-tag tag-limited">在庫わずか</div>
             <span className="storage-option-emoji" aria-hidden="true">🪑</span>
             <h3>机・椅子レンタル</h3>
             <div className="storage-option-price">
               <span className="amount">¥2,000</span>
-              <span className="unit">/月（税込・1セット）</span>
+              <span className="unit">/月・1セット（税込）</span>
             </div>
             <ul>
               <li>1セット＝<strong>2名がけテーブル1台＋椅子2脚</strong></li>
-              <li>最大2セットまで提供可能（在庫限り）</li>
-              <li>荷受け・梱包・PC作業の作業台に</li>
-              <li>不要になれば翌月から解除OK</li>
+              <li>最大<strong>2セット</strong>までご用意可能（在庫限り）</li>
+              <li>荷受け・梱包・PC作業の作業台として</li>
+              <li>不要になれば翌月から解除OK（月単位）</li>
             </ul>
+            <p className="storage-option-card-note">
+              倉庫内をちょっとした作業スペースとしても使いたい方向け。来客対応や軽作業に便利です。
+            </p>
           </div>
         </div>
         <p className="policy storage-options-note">
