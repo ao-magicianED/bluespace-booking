@@ -2899,6 +2899,62 @@ html {
   margin: 0 auto 1rem;
   max-width: 640px;
 }
+.storage-options-subhead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  max-width: 1080px;
+  margin: 2.4rem auto 1rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 2px solid var(--coral-100);
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: var(--navy-900);
+}
+.storage-options-subhead small {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--gray-text);
+  letter-spacing: 0;
+}
+.storage-options-subhead-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 900;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  box-shadow: var(--shadow-coral);
+  letter-spacing: 0;
+}
+.storage-options-subhead-furniture {
+  border-bottom-color: #bbf7d0;
+}
+.storage-options-subhead-furniture .storage-options-subhead-num {
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.32);
+}
+.storage-options-grid-furniture {
+  grid-template-columns: minmax(280px, 520px);
+  justify-content: center;
+}
+.storage-option-card-furniture {
+  background: linear-gradient(180deg, #fff 0%, #f0fdf4 100%);
+  border-color: #bbf7d0;
+}
+.storage-option-card-note {
+  margin: 0.9rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--gray-text);
+  line-height: 1.65;
+}
 .storage-plan {
   position: relative;
   background: #fff;
