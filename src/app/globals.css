@@ -3269,10 +3269,98 @@ html {
   color: #374151;
 }
 
+/* 追従CTAバー（ブルーストレージLP） */
+.storage-sticky-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  transform: translateY(120%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.storage-sticky-cta.show {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.storage-sticky-cta-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(15, 45, 92, 0.97);
+  backdrop-filter: blur(8px);
+  border-top: 2px solid var(--coral-500);
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.22);
+  padding: 0.7rem 1.1rem;
+}
+.storage-sticky-cta-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+  color: #fff;
+}
+.storage-sticky-cta-text strong {
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+.storage-sticky-cta-text span {
+  font-size: 0.78rem;
+  color: var(--coral-100);
+}
+.storage-sticky-cta-btn {
+  margin-left: auto;
+  display: inline-block;
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  color: #fff !important;
+  font-weight: 900;
+  padding: 0.8rem 1.6rem;
+  border-radius: 999px;
+  text-decoration: none;
+  box-shadow: var(--shadow-coral);
+  white-space: nowrap;
+  transition: transform 0.18s ease;
+  font-size: 0.95rem;
+}
+.storage-sticky-cta-btn:hover {
+  transform: translateY(-1px);
+}
+
 @media (max-width: 640px) {
   .storage-hero {
     padding: 2.4rem 1.2rem 2.2rem;
   }
+  /* セクション間隔をモバイル向けに圧縮 */
+  .storage-pain,
+  .storage-features,
+  .storage-perks,
+  .storage-delivery,
+  .storage-options,
+  .storage-pricing,
+  .storage-uses,
+  .storage-spec,
+  .storage-faq,
+  .storage-inquiry,
+  .storage-footer-cta {
+    margin: 2.6rem 0;
+  }
+  /* ヒーロー */
+  .storage-quick-facts li {
+    font-size: 0.8rem;
+    padding: 0.36rem 0.75rem;
+  }
+  .storage-hero-cta {
+    align-items: stretch;
+  }
+  .storage-cta-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 0.95rem 1rem;
+  }
+  /* フォーム・施設概要 */
   .storage-form .form-grid-2 {
     grid-template-columns: 1fr;
   }
@@ -3285,5 +3373,46 @@ html {
   }
   .storage-dl dt {
     margin-top: 0.5rem;
+  }
+  /* オプション小見出しの折り返し */
+  .storage-options-subhead {
+    font-size: 1.05rem;
+    gap: 0.45rem;
+  }
+  .storage-options-subhead small {
+    width: 100%;
+    margin-left: 2.45rem;
+  }
+  /* 初期費用カードの巨大¥0を少し抑える */
+  .bundle-hero-amount {
+    font-size: 2.6rem;
+  }
+  /* 追従バー: テキスト省略してボタン優先 */
+  .storage-sticky-cta-inner {
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+  }
+  .storage-sticky-cta-text strong {
+    font-size: 0.82rem;
+  }
+  .storage-sticky-cta-text span {
+    font-size: 0.68rem;
+  }
+  .storage-sticky-cta-btn {
+    padding: 0.7rem 1.1rem;
+    font-size: 0.85rem;
+  }
+  /* 追従バーがフッターCTAに被らないよう余白 */
+  .storage-footer-cta {
+    margin-bottom: 5.5rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .storage-sticky-cta-text span {
+    display: none;
+  }
+  .storage-sticky-cta-btn {
+    padding: 0.7rem 0.9rem;
   }
 }
