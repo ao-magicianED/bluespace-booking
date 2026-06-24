@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import StorageInquiryForm from "@/components/StorageInquiryForm";
+import StorageStickyCta from "@/components/StorageStickyCta";
 
 export const dynamic = "force-static";
 
@@ -659,6 +660,8 @@ export default function StorageShirokaneTakanawaPage() {
           見学・お問い合わせを送る →
         </a>
       </section>
+
+      <StorageStickyCta />
     </>
   );
 }
