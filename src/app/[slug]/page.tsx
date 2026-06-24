@@ -196,28 +196,50 @@ export default async function VenuePage({
         />
       ))}
 
-      <div className="booking-header">
-        {content && <span className="venue-badge">{content.badge}</span>}
-        <h1>{venue.name}</h1>
-        <p className="venue-meta">
-          🚉 {content?.station ?? venue.address}　👥 {content?.capacityShort ?? ""}
-        </p>
-        <p>
-          <strong>{priceLine}</strong>
-          ・30分単位（最大{venue.max_hours}時間連続）・24時間営業
-        </p>
-        {(venue.last_minute_percent > 0 || venue.early_bird_percent > 0) && (
-          <p>
-            {venue.last_minute_percent > 0 && `🈹 当日予約 ${venue.last_minute_percent}%OFF　`}
-            {venue.early_bird_percent > 0 &&
-              `🈹 ${venue.early_bird_days}日前までの早期予約 ${venue.early_bird_percent}%OFF`}
+      <div className={slug === "shirokane-takanawa" ? "booking-hero-row" : ""}>
+        <div className="booking-header">
+          {content && <span className="venue-badge">{content.badge}</span>}
+          <h1>{venue.name}</h1>
+          <p className="venue-meta">
+            🚉 {content?.station ?? venue.address}　👥 {content?.capacityShort ?? ""}
           </p>
-        )}
-        <p>
-          <a href="#book" className="hero-book-btn">
-            空き状況を見て予約する ↓
+          <p>
+            <strong>{priceLine}</strong>
+            ・30分単位（最大{venue.max_hours}時間連続）・24時間営業
+          </p>
+          {(venue.last_minute_percent > 0 || venue.early_bird_percent > 0) && (
+            <p>
+              {venue.last_minute_percent > 0 && `🈹 当日予約 ${venue.last_minute_percent}%OFF　`}
+              {venue.early_bird_percent > 0 &&
+                `🈹 ${venue.early_bird_days}日前までの早期予約 ${venue.early_bird_percent}%OFF`}
+            </p>
+          )}
+          <p>
+            <a href="#book" className="hero-book-btn">
+              空き状況を見て予約する ↓
+            </a>
+          </p>
+        </div>
+
+        {slug === "shirokane-takanawa" && (
+          <a href="/storage/shirokane-takanawa" className="storage-promo">
+            <span className="storage-promo-badge">🏢 法人向け 倉庫利用 募集中</span>
+            <strong className="storage-promo-title">
+              このスペース、<br />
+              <span className="storage-promo-accent">月極の倉庫</span>としても貸出中
+            </strong>
+            <span className="storage-promo-price">
+              1㎡あたりの賃料が<strong>大手トランクルーム比 約45%お得</strong>
+              <small>（キュラーズ白金高輪5畳 定価との面積単価比較・2026年6月時点）</small>
+            </span>
+            <ul className="storage-promo-uses">
+              <li>📦 EC在庫・梱包材の保管に</li>
+              <li>🏪 店舗の「第2バックヤード」に</li>
+              <li>🔑 15㎡まるごと1社専用・スマートロック</li>
+            </ul>
+            <span className="storage-promo-cta">倉庫プランの料金を見る →</span>
           </a>
-        </p>
+        )}
       </div>
 
       <AvailabilityDigest availability={initial} variant="banner" />
