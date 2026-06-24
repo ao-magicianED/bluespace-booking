@@ -4,10 +4,13 @@ import ContactForm from "@/components/ContactForm";
 
 export const dynamic = "force-dynamic";
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
+
 export const metadata: Metadata = {
   title: "お問い合わせ・長期/定期利用のご相談",
   description:
     "ブルースペースへのお問い合わせ、長期利用・定期利用のお見積もり依頼はこちらのフォームからどうぞ。",
+  alternates: { canonical: `${SITE}/contact` },
 };
 
 export default async function ContactPage({

@@ -35,8 +35,10 @@ export async function generateMetadata({
       title,
       description,
       url: `${SITE}/${slug}`,
+      siteName: "ブルースペース公式予約",
+      locale: "ja_JP",
       type: "website",
-      images: [{ url: `${SITE}${content.photos.hero}`, width: 1200, height: 800 }],
+      images: [{ url: `${SITE}${content.photos.hero}`, width: 1200, height: 630 }],
     },
   };
 }

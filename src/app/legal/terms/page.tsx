@@ -1,4 +1,12 @@
-export const metadata = { title: "利用規約 | ブルーステージ予約" };
+import type { Metadata } from "next";
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
+
+export const metadata: Metadata = {
+  title: "利用規約",
+  description: "ブルースペース（レンタルスペース予約サービス）の利用規約です。",
+  alternates: { canonical: `${SITE}/legal/terms` },
+};
 
 export default function TermsPage() {
   return (

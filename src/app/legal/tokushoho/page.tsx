@@ -1,4 +1,12 @@
-export const metadata = { title: "特定商取引法に基づく表記" };
+import type { Metadata } from "next";
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
+
+export const metadata: Metadata = {
+  title: "特定商取引法に基づく表記",
+  description: "ブルースペース（レンタルスペース予約サービス）の特定商取引法に基づく表記です。",
+  alternates: { canonical: `${SITE}/legal/tokushoho` },
+};
 
 /**
  * 特定商取引法に基づく表記（ひな形）
