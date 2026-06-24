@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import AuthNav from "@/components/AuthNav";
@@ -13,6 +13,12 @@ const notoSansJP = Noto_Sans_JP({
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0f2d5c",
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: {
@@ -21,10 +27,20 @@ export const metadata: Metadata = {
   },
   description:
     "ブルーステージ合同会社が運営するレンタルスペース「ブルースペース」の公式予約サイト。仲介手数料なしの最安価格、空き状況を見てそのままクレジットカードで予約完了。",
+  alternates: { canonical: SITE },
   openGraph: {
     siteName: "ブルースペース公式予約",
     locale: "ja_JP",
     type: "website",
+    url: SITE,
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
+  other: {
+    ...(process.env.GOOGLE_SITE_VERIFICATION
+      ? { "google-site-verification": process.env.GOOGLE_SITE_VERIFICATION }
+      : {}),
   },
 };
 

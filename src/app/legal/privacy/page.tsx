@@ -1,4 +1,12 @@
-export const metadata = { title: "プライバシーポリシー | ブルーステージ予約" };
+import type { Metadata } from "next";
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
+
+export const metadata: Metadata = {
+  title: "プライバシーポリシー",
+  description: "ブルースペース（レンタルスペース予約サービス）のプライバシーポリシーです。個人情報の取り扱いについて説明しています。",
+  alternates: { canonical: `${SITE}/legal/privacy` },
+};
 
 export default function PrivacyPage() {
   return (

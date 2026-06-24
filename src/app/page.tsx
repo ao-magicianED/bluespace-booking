@@ -6,6 +6,31 @@ import type { Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
+
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": `${SITE}/#organization`,
+  name: "ブルーステージ合同会社",
+  legalName: "ブルーステージ合同会社",
+  url: "https://bluestage-lcc.com",
+  contactPoint: {
+    "@type": "ContactPoint",
+    contactType: "customer service",
+    url: `${SITE}/contact`,
+  },
+};
+
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": `${SITE}/#website`,
+  name: "ブルースペース",
+  url: SITE,
+  publisher: { "@id": `${SITE}/#organization` },
+};
+
 export default async function HomePage() {
   if (!isDbConfigured()) {
     return (
@@ -31,6 +56,14 @@ export default async function HomePage() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd).replace(/</g, "\\u003c") }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd).replace(/</g, "\\u003c") }}
+      />
       <section className="home-hero">
         <span className="hero-eyebrow">公式予約・仲介手数料なし</span>
         <h1>
