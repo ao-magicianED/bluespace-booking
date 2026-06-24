@@ -8,6 +8,7 @@ import { getSessionUser } from "@/lib/auth-server";
 import { todayJst } from "@/lib/slots";
 import { getVenueContent } from "@/content/venues";
 import BookingGrid from "@/components/BookingGrid";
+import AvailabilityDigest from "@/components/AvailabilityDigest";
 import PhotoGallery from "@/components/PhotoGallery";
 import FloatingNav from "@/components/FloatingNav";
 import type { VenueOption } from "@/lib/types";
@@ -219,6 +220,8 @@ export default async function VenuePage({
         </p>
       </div>
 
+      <AvailabilityDigest availability={initial} variant="banner" />
+
       {galleryToShow.length > 0 && <PhotoGallery categories={galleryToShow} />}
 
       {content && (
@@ -234,6 +237,14 @@ export default async function VenuePage({
           </div>
         </section>
       )}
+
+      <section className="venue-section" id="availability">
+        <h2>今週の空き状況（直近7日間）</h2>
+        <p className="policy">
+          本日から7日間の予約可能時間の目安です（24時間営業 0:00〜24:00）。
+        </p>
+        <AvailabilityDigest availability={initial} variant="week" />
+      </section>
 
       <section className="venue-section" id="book">
         <h2>空き状況・ご予約</h2>
