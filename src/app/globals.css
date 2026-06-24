@@ -2327,6 +2327,39 @@ html {
   transform: none;
 }
 
+/* 室内実物写真（ヒーロー直下） */
+.storage-room-photo {
+  margin: -1rem 0 3rem;
+}
+.storage-room-photo figure {
+  margin: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  background: #fff;
+}
+.storage-room-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.storage-room-photo figcaption {
+  padding: 0.9rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--navy-900);
+  background: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.storage-room-photo .storage-room-note {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--gray-text);
+}
+
 .storage-pain,
 .storage-features,
 .storage-perks,

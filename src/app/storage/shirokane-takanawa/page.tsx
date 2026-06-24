@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import StorageInquiryForm from "@/components/StorageInquiryForm";
 import StorageStickyCta from "@/components/StorageStickyCta";
 
@@ -122,7 +123,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ja_JP",
     siteName: "ブルーストレージ",
-    images: [{ url: `${SITE}/venues/shirokane-takanawa/hero.jpg` }],
+    images: [{ url: `${SITE}/storage/shirokane-takanawa-room.jpg` }],
   },
   twitter: { card: "summary_large_image" },
   robots: { index: true, follow: true },
@@ -135,7 +136,7 @@ const JSON_LD = {
   description:
     "港区白金高輪の15㎡完全個室・法人向けミニ倉庫。1社専用・スマートロック24時間入退室・除湿機・電源・Wi-Fi完備。",
   url: PAGE_URL,
-  image: `${SITE}/venues/shirokane-takanawa/hero.jpg`,
+  image: `${SITE}/storage/shirokane-takanawa-room.jpg`,
   address: {
     "@type": "PostalAddress",
     streetAddress: "白金3-1-12 第2浅野ビル301",
@@ -235,6 +236,23 @@ export default function StorageShirokaneTakanawaPage() {
             <span className="policy">通常1〜2営業日でご返信／無理な営業はいたしません</span>
           </div>
         </div>
+      </section>
+
+      <section className="storage-room-photo">
+        <figure>
+          <Image
+            src="/storage/shirokane-takanawa-room.jpg"
+            alt="ブルーストレージ白金高輪の室内（約15㎡・完全個室）"
+            width={1536}
+            height={1024}
+            priority
+            sizes="(max-width: 1120px) 100vw, 1120px"
+          />
+          <figcaption>
+            約15㎡（9畳）を1社まるごと。棚を自由に置いて「第2バックヤード」に。
+            <span className="storage-room-note">※レイアウトの一例です（什器は設置されていません）</span>
+          </figcaption>
+        </figure>
       </section>
 
       <section className="storage-pain">
