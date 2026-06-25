@@ -1,6 +1,6 @@
 # 引き継ぎドキュメント — ブルースペース予約システム
 
-最終更新: 2026-06-12 / 作成: Claude Code（あお様の指示により次の担当AI/開発者向けに整理）
+最終更新: 2026-06-25 / 作成: Claude Code（あお様の指示により次の担当AI/開発者向けに整理）
 
 ---
 
@@ -125,10 +125,15 @@
 
 ## 7. 残タスク（優先順）
 
-1. **GBPウェブサイトURL統一（残り5件）**: 白金高輪・西新宿403は完了済み。残り＝京成小岩/神田/上野御徒町/上野4A/上野4B。
+### ✅ 2026-06-25 完了
+- PR#17: ブルーストレージ白金高輪LPに実物室内写真追加（Codex AI で TV・机を除去、`public/storage/shirokane-takanawa-room.jpg`）
+- PR#18: SEO一式（ファビコン・OGP・構造化データ・Googleサーチコンソール認証ファイル）
+
+### 未完了（優先順）
+1. **特商法ページ** `src/app/legal/tokushoho/page.tsx`: 運営責任者名・住所・電話が未記入（**公開前に必須**）
+2. **GBPウェブサイトURL統一（残り5件）**: 白金高輪・西新宿403は完了済み。残り＝京成小岩/神田/上野御徒町/上野4A/上野4B。
    GBPグループ: https://business.google.com/groups/102124491183677146513/locations
-   各拠点の鉛筆→連絡先→ウェブサイトに `https://bluespacerental.com/{slug}` を設定
-2. **特商法ページ** `app/src/app/legal/tokushoho/page.tsx`: 運営責任者名・住所・電話が未記入（公開前に必須）
+   各拠点の鉛筆→連絡先→ウェブサイトに `https://bluespacerental.com/{slug}` を設定（手動）
 3. **Stripe本番モード切替**（実売開始時）: 本番キーへ差し替え→Webhookエンドポイントを本番モードで再作成→`STRIPE_WEBHOOK_SECRET`更新→テスト予約1件で確認。銀行振込（customer_balance）が本番で有効化されているか要確認
 4. **Supabase AuthのSMTP**: 会員確認メールが現在Supabase内蔵SMTP（時間あたり数通制限）。Authentication→Emails→SMTP SettingsにResendのSMTPを設定する
 5. **ドメイン移管**（2027年11月頃）: bluespacerental.com をXサーバー→Cloudflare Registrar（docs/xserver-dns-setup.md参照）
