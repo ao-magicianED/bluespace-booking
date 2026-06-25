@@ -8,10 +8,6 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE}/legal/tokushoho` },
 };
 
-/**
- * 特定商取引法に基づく表記（ひな形）
- * ★公開前に必ず正式な会社情報に置き換えて、内容を確認すること★
- */
 export default function TokushohoPage() {
   return (
     <>
@@ -24,17 +20,22 @@ export default function TokushohoPage() {
           </tr>
           <tr>
             <th>運営責任者</th>
-            <td>{/* ★代表者名を記載 */}（公開前に記載）</td>
+            <td>通信販売業務責任者　菅野 雄策</td>
           </tr>
           <tr>
             <th>所在地</th>
-            <td>{/* ★登記住所を記載 */}（公開前に記載）</td>
+            <td>東京都千代田区鍛冶町2丁目8-7 光起ビル B1F</td>
           </tr>
           <tr>
             <th>連絡先</th>
             <td>
               メール: bluespace@bluestage-lcc.com
-              {/* ★電話番号を記載（請求があった場合に遅滞なく開示する旨でも可） */}
+              <br />
+              お問い合わせフォーム: <a href="/contact">https://bluespacerental.com/contact</a>
+              <br />
+              電話番号: 請求があった場合、遅滞なく開示いたします。お問い合わせフォームよりご連絡ください。
+              <br />
+              ※電話でのお問い合わせは受け付けておりません。
             </td>
           </tr>
           <tr>

@@ -75,6 +75,8 @@ export default async function AdminPage({
       <div className="admin-header">
         <h1>管理ダッシュボード</h1>
         <span>
+          <Link href="/admin/ai-ops" className="policy">AI設定</Link>
+          {"　"}
           <Link href="/admin/analytics" className="policy">📈 分析</Link>
           {"　"}
           <Link href="/admin/ledger" className="policy">📒 予約台帳・CSV</Link>
