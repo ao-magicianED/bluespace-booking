@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BlueReserve — レンタルスペース運営の予約手数料、もう払わない。</title>
+<meta name="description" content="買い切り型の自社予約システム。インスタベース35%、よやクル月額の代わりに、一度の導入費で予約手数料ゼロ。ブルーステージ7拠点で実証済み。" />
+<meta property="og:title" content="BlueReserve — 予約手数料、もう払わない。" />
+<meta property="og:description" content="買い切り型の自社予約システム。一度払えば、Stripe決済手数料3.6%以外は永続ゼロ。" />
+<meta property="og:type" content="website" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-1: #0f2d5c;
+    --brand-2: #1a3a6c;
+    --brand-3: #1e4d8c;
+    --accent: #15803d;
+    --warn: #b91c1c;
+  }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Noto Sans JP', sans-serif; color: #1f2937; }
+  .hero-bg { background: linear-gradient(160deg, var(--brand-1) 0%, var(--brand-2) 50%, var(--brand-3) 100%); }
+  .section-divider { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }
+  .price-glow { box-shadow: 0 20px 60px -20px rgba(30, 77, 140, 0.4); }
+  .number-big { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+  .badge-hot { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  details[open] .faq-icon { transform: rotate(45deg); }
+  .faq-icon { transition: transform 0.2s; }
+  .scroll-fade { opacity: 0; transform: translateY(20px); transition: opacity 0.6s, transform 0.6s; }
+  .scroll-fade.in { opacity: 1; transform: translateY(0); }
+  .compare-row:nth-child(even) { background: #f8fafc; }
+</style>
+</head>
+<body class="antialiased">
+
+<!-- Nav -->
+<nav class="fixed top-0 inset-x-0 z-50 bg-white/95 backdrop-blur border-b border-slate-200">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <a href="#top" class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg" style="background: linear-gradient(135deg, var(--brand-1), var(--brand-3));"></div>
+      <span class="font-bold text-lg tracking-tight">BlueReserve</span>
+    </a>
+    <div class="hidden md:flex items-center gap-6 text-sm">
+      <a href="#problem" class="hover:text-blue-700">課題</a>
+      <a href="#features" class="hover:text-blue-700">機能</a>
+      <a href="#pricing" class="hover:text-blue-700">料金</a>
+      <a href="#simulator" class="hover:text-blue-700">シミュレーター</a>
+      <a href="#faq" class="hover:text-blue-700">FAQ</a>
+    </div>
+    <a href="#contact" class="text-sm font-bold text-white px-4 py-2 rounded-lg" style="background: var(--brand-3);">資料請求</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section id="top" class="hero-bg text-white pt-32 pb-24 md:pt-40 md:pb-32 relative overflow-hidden">
+  <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 70% 80%, white 1px, transparent 1px); background-size: 60px 60px;"></div>
+  <div class="max-w-6xl mx-auto px-4 relative z-10">
+    <div class="grid md:grid-cols-2 gap-12 items-center">
+      <div>
+        <div class="flex flex-wrap items-center gap-2 mb-6">
+          <div class="inline-flex items-center gap-2 bg-white/15 backdrop-blur px-3 py-1.5 rounded-full text-xs">
+            <span class="w-2 h-2 rounded-full bg-green-400 badge-hot"></span>
+            <span>先着10社限定 30% OFF</span>
+          </div>
+          <div class="inline-flex items-center gap-2 bg-amber-400/20 backdrop-blur border border-amber-300/40 px-3 py-1.5 rounded-full text-xs">
+            <span>★</span>
+            <span>BlueReserve × ZokujinAI で集客もセット</span>
+          </div>
+        </div>
+        <h1 class="text-4xl md:text-6xl font-black leading-tight mb-6">
+          予約手数料、<br/>
+          <span class="text-yellow-300">もう払わない。</span>
+        </h1>
+        <p class="text-lg md:text-xl text-blue-100 leading-relaxed mb-3">
+          インスタベース 35%・スペマ 30% の手数料、<br class="hidden md:inline"/>
+          よやクル・UPNOW の月額。<br/>
+          一度の導入費で <strong class="text-white">永続ゼロ円</strong> に。
+        </p>
+        <p class="text-base text-amber-200 mb-8">
+          ＋ Googleマップ運用代行（ZokujinAI）で集客導線も丸ごとサポート
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4">
+          <a href="#pricing" class="inline-flex items-center justify-center gap-2 bg-white text-blue-900 font-bold px-6 py-4 rounded-xl hover:bg-yellow-300 transition">
+            料金プランを見る
+            <span>→</span>
+          </a>
+          <a href="#simulator" class="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur border-2 border-white/30 text-white font-bold px-6 py-4 rounded-xl hover:bg-white/20 transition">
+            節約額をシミュレート
+          </a>
+        </div>
+        <div class="mt-8 flex items-center gap-6 text-sm text-blue-100">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z"/></svg>
+            ブルーステージ7拠点で実証済み
+          </div>
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z"/></svg>
+            最短2週間で公開
+          </div>
+        </div>
+      </div>
+      <div class="relative">
+        <div class="bg-white rounded-2xl p-6 shadow-2xl text-slate-800">
+          <div class="text-sm text-slate-500 mb-3">月商100万円のオーナーの場合</div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
+              <div>
+                <div class="font-bold text-red-900">インスタベース</div>
+                <div class="text-xs text-red-700">35%の手数料</div>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-black text-red-700 number-big">35<span class="text-sm">万円/月</span></div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+              <div>
+                <div class="font-bold text-amber-900">よやクル</div>
+                <div class="text-xs text-amber-700">月額4,980円+永続</div>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-black text-amber-700 number-big">4,980<span class="text-sm">円/月</span></div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-4 bg-green-50 rounded-lg border-2 border-green-500 price-glow">
+              <div>
+                <div class="font-bold text-green-900">BlueReserve</div>
+                <div class="text-xs text-green-700">買い切り後は実質ゼロ</div>
+              </div>
+              <div class="text-right">
+                <div class="text-3xl font-black text-green-700 number-big">¥0<span class="text-sm">/月</span></div>
+                <div class="text-xs text-green-600">※Stripe決済手数料3.6%のみ</div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-4 border-t border-slate-200 text-center text-sm text-slate-600">
+            年間 <strong class="text-green-700 text-lg">420万円</strong> の節約
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Problem -->
+<section id="problem" class="py-20 bg-slate-50">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <div class="text-sm font-bold text-red-700 mb-3">▼ そのままだと、こんなことに</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">毎月、利益の3割が消えていく</h2>
+      <p class="text-slate-600">レンタルスペース運営の最大の敵は、家賃でも光熱費でもなく予約手数料です。</p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200">
+        <div class="text-5xl font-black text-red-600 number-big mb-2">35<span class="text-2xl">%</span></div>
+        <div class="font-bold mb-2">インスタベース</div>
+        <p class="text-sm text-slate-600">月商100万なら35万消える。年間420万円。</p>
+      </div>
+      <div class="bg-white p-6 rounded-2xl border border-slate-200">
+        <div class="text-5xl font-black text-red-600 number-big mb-2">30<span class="text-2xl">%</span></div>
+        <div class="font-bold mb-2">スペースマーケット</div>
+        <p class="text-sm text-slate-600">月商100万なら30万消える。年間360万円。</p>
+      </div>
+      <div class="bg-white p-6 rounded-2xl border border-slate-200">
+        <div class="text-5xl font-black text-amber-600 number-big mb-2">¥4,980<span class="text-lg">+</span></div>
+        <div class="font-bold mb-2">よやクル / UPNOW</div>
+        <p class="text-sm text-slate-600">月額は安いが、ずっと払い続ける。テンプレ固定。</p>
+      </div>
+    </div>
+    <div class="mt-12 p-8 bg-gradient-to-r from-blue-900 to-blue-700 rounded-2xl text-white text-center">
+      <div class="text-2xl md:text-3xl font-black mb-2">そろそろ「自社予約」に切り替えませんか？</div>
+      <p class="text-blue-100">手数料・月額をやめて、利益を全部自分のものに。</p>
+    </div>
+  </div>
+</section>
+
+<!-- Solution -->
+<section class="py-20 bg-white">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-16">
+      <div class="text-sm font-bold text-blue-700 mb-3">▼ BlueReserveが解決します</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">買い切り×自社予約という新しい選択肢</h2>
+    </div>
+    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-white text-2xl font-black" style="background: linear-gradient(135deg, var(--brand-1), var(--brand-3));">¥</div>
+        <h3 class="font-black text-lg mb-2">予約手数料ゼロ</h3>
+        <p class="text-sm text-slate-600 leading-relaxed">一度の導入費で完結。Stripe決済手数料3.6%だけ。月商が増えても支払いは増えません。</p>
+      </div>
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-white text-2xl font-black" style="background: linear-gradient(135deg, var(--brand-1), var(--brand-3));">⚡</div>
+        <h3 class="font-black text-lg mb-2">全機能フル装備</h3>
+        <p class="text-sm text-slate-600 leading-relaxed">決済・カレンダー連動・段階制キャンセル・会員制・SEOまで標準装備。</p>
+      </div>
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-white text-2xl font-black" style="background: linear-gradient(135deg, var(--brand-1), var(--brand-3));">★</div>
+        <h3 class="font-black text-lg mb-2">あなたの資産になる</h3>
+        <p class="text-sm text-slate-600 leading-relaxed">独自ドメイン・SEO・顧客データ・GA4。すべて自分のもの。</p>
+      </div>
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-white text-2xl font-black" style="background: linear-gradient(135deg, #b45309, #d97706);">📍</div>
+        <h3 class="font-black text-lg mb-2">集客もセット</h3>
+        <p class="text-sm text-slate-600 leading-relaxed">ZokujinAIのGoogleマップ運用で月3,500円〜。ポータル卒業の最短ルート。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Feature Comparison -->
+<section id="features" class="py-20 bg-slate-50">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl md:text-4xl font-black mb-4">機能比較: BlueReserve vs よやクル</h2>
+      <p class="text-slate-600">よやクルにできないことが、ぜんぶできます。</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div class="grid grid-cols-12 bg-slate-900 text-white text-sm font-bold p-4">
+        <div class="col-span-6">機能</div>
+        <div class="col-span-3 text-center">BlueReserve</div>
+        <div class="col-span-3 text-center">よやクル</div>
+      </div>
+      <div id="compare-table"></div>
+    </div>
+    <p class="text-xs text-slate-500 mt-4 text-center">緑のハイライトは BlueReserve だけ・優位の機能</p>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section id="pricing" class="py-20 bg-white">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <div class="text-sm font-bold text-blue-700 mb-3">▼ 料金プラン</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">部屋数で選ぶシンプル料金</h2>
+      <p class="text-slate-600">買い切り。一度払えば、Stripe決済手数料3.6%以外は永続ゼロ。</p>
+    </div>
+
+    <!-- Campaign Banner -->
+    <div class="bg-gradient-to-r from-red-600 to-orange-500 text-white p-6 rounded-2xl mb-10 text-center">
+      <div class="inline-block bg-white text-red-600 font-black text-sm px-3 py-1 rounded-full mb-2">期間限定</div>
+      <div class="text-2xl md:text-3xl font-black">先着10社限定 30% OFF キャンペーン中</div>
+      <div class="text-sm text-orange-100 mt-1">残り枠は予告なく終了します</div>
+    </div>
+
+    <div class="grid md:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
+      <div class="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-bold">1部屋</div>
+        <div class="text-2xl font-black my-2">¥55,000</div>
+        <div class="text-xs text-slate-400 line-through">¥78,500</div>
+        <div class="text-xs text-green-600 font-bold mt-1">キャンペーン適用</div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-bold">2-3部屋</div>
+        <div class="text-2xl font-black my-2">¥88,000</div>
+        <div class="text-xs text-slate-400 line-through">¥125,700</div>
+        <div class="text-xs text-green-600 font-bold mt-1">キャンペーン適用</div>
+      </div>
+      <div class="bg-white border-2 rounded-xl p-4 text-center relative price-glow" style="border-color: var(--brand-3);">
+        <div class="absolute -top-3 left-1/2 -translate-x-1/2 text-white text-xs font-bold px-3 py-1 rounded-full" style="background: var(--brand-3);">人気</div>
+        <div class="text-xs font-bold" style="color: var(--brand-3);">4-5部屋</div>
+        <div class="text-2xl font-black my-2">¥132,000</div>
+        <div class="text-xs text-slate-400 line-through">¥188,500</div>
+        <div class="text-xs text-green-600 font-bold mt-1">キャンペーン適用</div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-bold">6-10部屋</div>
+        <div class="text-2xl font-black my-2">¥198,000</div>
+        <div class="text-xs text-slate-400 line-through">¥282,800</div>
+        <div class="text-xs text-green-600 font-bold mt-1">キャンペーン適用</div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-bold">11-20部屋</div>
+        <div class="text-2xl font-black my-2">¥297,000</div>
+        <div class="text-xs text-slate-400 line-through">¥424,200</div>
+        <div class="text-xs text-green-600 font-bold mt-1">キャンペーン適用</div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-bold">21部屋以上</div>
+        <div class="text-2xl font-black my-2">要相談</div>
+        <div class="text-xs text-slate-500 mt-1">個別お見積もり</div>
+      </div>
+    </div>
+
+    <!-- Base Features -->
+    <div class="bg-slate-50 rounded-2xl p-6 md:p-8">
+      <div class="font-bold text-lg mb-4">全プラン共通の標準機能</div>
+      <div class="grid md:grid-cols-3 gap-3 text-sm">
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> 時間単位の予約・空き状況表示</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> Stripe決済（カード・銀行振込・請求書）</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> Googleカレンダー双方向連動</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> ダブルブッキング物理防止（DB制約）</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> 段階制キャンセル自動返金</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> 会員制+マイページ</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> クーポン・早割・直前割</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> 管理画面（売上・予約一覧・統計）</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> インボイス対応領収書発行</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> SEO構造化データ・サイトマップ</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> メール・Discord通知</div>
+        <div class="flex items-start gap-2"><span class="text-green-600 font-bold">✓</span> Next.jsフルカスタム可能</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Upsell -->
+<section class="py-20 bg-slate-50">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <div class="text-sm font-bold text-blue-700 mb-3">▼ 追加オプション</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">必要なものだけ、必要なときに</h2>
+      <p class="text-slate-600">導入支援から運用代行・機能拡張まで。あなたの状況に合わせて選べる</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+
+      <!-- 導入支援 -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <div class="px-3 py-1 bg-amber-600 text-white text-xs font-bold rounded-full">導入支援</div>
+          <div class="text-sm text-slate-500">スタートを楽に</div>
+        </div>
+        <div class="space-y-3">
+          <div class="bg-white border-2 border-amber-500 rounded-xl p-5 price-glow">
+            <div class="flex items-start justify-between gap-3 mb-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">★ おすすめ</span>
+                </div>
+                <h4 class="font-black">Stripe導入支援</h4>
+              </div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">買い切り</div>
+                <div class="font-black text-amber-700">¥33,000</div>
+              </div>
+            </div>
+            <p class="text-sm text-slate-600">アカウント開設・本人確認書類・Webhook設定・テスト決済まで丸ごと代行</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">GA4・Search Console設定</h4></div>
+              <div class="font-black text-slate-700">¥22,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">計測タグ設置・コンバージョン設定・サイトマップ送信まで</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">Google広告アカウント開設</h4></div>
+              <div class="font-black text-slate-700">¥33,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">アカウント開設・初期キャンペーン構築・コンバージョン設定</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">Meta広告アカウント開設</h4></div>
+              <div class="font-black text-slate-700">¥33,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">FB/Instagram広告・ピクセル設置・カスタムオーディエンス設定</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">広告クリエイティブ初期制作</h4></div>
+              <div class="font-black text-slate-700">¥33,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">AIで3パターンのバナー・コピーを生成</p>
+          </div>
+          <div class="bg-white border-2 border-amber-500 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">★ MEO</span>
+                </div>
+                <h4 class="font-bold">Googleビジネスプロフィール最適化</h4>
+              </div>
+              <div class="font-black text-slate-700">¥22,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">NAP統一・カテゴリ最適化・写真整備・口コミ運用基盤構築（マップ表示順位UP）</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 運用代行・月額 -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <div class="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-full">運用代行（月額）</div>
+          <div class="text-sm text-slate-500">伴走サポート</div>
+        </div>
+        <div class="space-y-3">
+          <div class="bg-white border-2 border-blue-500 rounded-xl p-5 price-glow">
+            <div class="flex items-start justify-between gap-3 mb-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">★ 目玉</span>
+                </div>
+                <h4 class="font-black">AIチャットボット</h4>
+              </div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">月額</div>
+                <div class="font-black text-blue-700">¥2,200〜</div>
+              </div>
+            </div>
+            <p class="text-sm text-slate-600 mb-2">Claude APIで24/365 FAQ自動応答。問い合わせ工数9割削減</p>
+            <div class="text-xs text-slate-500 pt-2 border-t border-slate-100">
+              Light¥2,200 / Std¥5,500 / Pro¥9,800<br/>
+              初期: 知識ベース構築 ¥33,000
+            </div>
+          </div>
+          <div class="bg-white border-2 border-green-500 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">アナリティクスレポート</h4></div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">月額</div>
+                <div class="font-black text-green-700">¥5,500</div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">月次PV・流入経路・CV分析 + 改善提案メモ</p>
+          </div>
+          <div class="bg-white border-2 border-amber-500 rounded-xl p-5 price-glow">
+            <div class="flex items-start justify-between gap-3 mb-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">★ MEO・集客</span>
+                </div>
+                <h4 class="font-black">Googleマップ運用代行</h4>
+              </div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">月額</div>
+                <div class="font-black text-amber-700">¥3,500〜</div>
+              </div>
+            </div>
+            <p class="text-sm text-slate-600 mb-2">月4回のクチコミ投稿代行 + 口コミ返信代行。マップ上位表示でポータル依存から脱却</p>
+            <div class="text-xs text-slate-500 pt-2 border-t border-slate-100">
+              Light ¥3,500（月4投稿）/ Standard ¥5,500（月4投稿+口コミ返信5件）/ Pro ¥9,800（週1投稿+口コミ無制限）
+            </div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">Google広告運用代行</h4></div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">月額</div>
+                <div class="font-black">¥33,000</div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">入札・予算最適化・週次調整（広告費別途）</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">Meta広告運用代行</h4></div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">月額</div>
+                <div class="font-black">¥33,000</div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">クリエイティブABテスト・オーディエンス最適化（広告費別途）</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">改善コンサル</h4></div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">月額</div>
+                <div class="font-black">¥22,000</div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">月1回オンラインMTG30分・施策提案</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">保守・ホスティング</h4></div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">月額</div>
+                <div class="font-black">¥1,100〜</div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">Light¥1,100 / Std¥3,300 / Premium¥9,800（月1改修込み）</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 機能拡張・買い切り -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <div class="px-3 py-1 bg-slate-700 text-white text-xs font-bold rounded-full">機能拡張（買い切り）</div>
+          <div class="text-sm text-slate-500">標準にない機能</div>
+        </div>
+        <div class="space-y-3">
+          <div class="bg-white border-2 border-green-500 rounded-xl p-5 price-glow">
+            <div class="flex items-start justify-between gap-3 mb-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded">★ 売上UP</span>
+                </div>
+                <h4 class="font-black">動的価格</h4>
+              </div>
+              <div class="text-right">
+                <div class="text-xs text-slate-500">買い切り</div>
+                <div class="font-black text-green-700">¥55,000</div>
+              </div>
+            </div>
+            <p class="text-sm text-slate-600">稼働率・リードタイム連動で自動価格調整。売上15-30%UP実績</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">API/Webhook公開</h4></div>
+              <div class="font-black text-slate-700">¥55,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">Zapier・n8n・自社システム連携</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">ポイント・会員ランク</h4></div>
+              <div class="font-black text-slate-700">¥33,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">リピーター囲い込み施策</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">freee自動連携</h4></div>
+              <div class="font-black text-slate-700">¥33,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">売上を会計ソフトに自動仕訳</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">SMS / LINE公式連携</h4></div>
+              <div class="font-black text-slate-700">¥33,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">リマインダー到達率UP</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div class="flex-1"><h4 class="font-bold">360度パノラマ内見</h4></div>
+              <div class="font-black text-slate-700">¥22,000</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">スマホで部屋を360度確認</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-10 p-6 bg-gradient-to-r from-blue-50 to-amber-50 border border-slate-200 rounded-2xl text-center">
+      <div class="font-black text-lg mb-2">どれを選べばいい？迷ったらご相談ください</div>
+      <p class="text-sm text-slate-600 mb-4">あなたの拠点規模・予算・目標に応じて、最適な組み合わせをご提案します</p>
+      <a href="#contact" class="inline-flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-bold px-6 py-3 rounded-xl transition">
+        無料相談で組み合わせを聞く →
+      </a>
+    </div>
+
+    <div class="mt-6 text-center text-xs text-slate-500">
+      表示価格はすべて税込です。先着10社キャンペーン期間中は基本料金のみ30%OFF適用。<br/>
+      広告運用代行の広告費はお客様負担となります。
+    </div>
+  </div>
+</section>
+
+<!-- Simulator -->
+<section id="simulator" class="py-20 bg-white">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <div class="text-sm font-bold text-green-700 mb-3">▼ あなたの節約額をシミュレート</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">3年でいくら節約できる？</h2>
+      <p class="text-slate-600">現在使っているサービスと比較してみてください</p>
+    </div>
+
+    <div class="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-6 md:p-10 border border-slate-200">
+
+      <div class="grid md:grid-cols-2 gap-6 mb-8">
+        <div>
+          <label class="block text-sm font-bold mb-2">部屋数</label>
+          <div class="flex items-center gap-3">
+            <input type="range" min="1" max="20" value="4" id="sim-rooms" class="flex-1 accent-blue-700" />
+            <span id="sim-rooms-out" class="font-black text-2xl number-big w-16 text-right">4部屋</span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-2">1部屋あたり月商</label>
+          <div class="flex items-center gap-3">
+            <input type="range" min="5" max="100" value="25" step="5" id="sim-rev" class="flex-1 accent-blue-700" />
+            <span id="sim-rev-out" class="font-black text-2xl number-big w-20 text-right">25万</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-6">
+        <label class="block text-sm font-bold mb-2">現在の比較対象</label>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <label class="cursor-pointer">
+            <input type="radio" name="vs" value="insta" class="peer sr-only" checked />
+            <div class="p-3 text-center rounded-lg border-2 border-slate-200 peer-checked:border-red-500 peer-checked:bg-red-50 text-sm font-bold transition">インスタベース<br/><span class="text-xs font-normal">(35%)</span></div>
+          </label>
+          <label class="cursor-pointer">
+            <input type="radio" name="vs" value="spacema" class="peer sr-only" />
+            <div class="p-3 text-center rounded-lg border-2 border-slate-200 peer-checked:border-red-500 peer-checked:bg-red-50 text-sm font-bold transition">スペースマーケット<br/><span class="text-xs font-normal">(30%)</span></div>
+          </label>
+          <label class="cursor-pointer">
+            <input type="radio" name="vs" value="yoyakul" class="peer sr-only" />
+            <div class="p-3 text-center rounded-lg border-2 border-slate-200 peer-checked:border-amber-500 peer-checked:bg-amber-50 text-sm font-bold transition">よやクル<br/><span class="text-xs font-normal">(月額)</span></div>
+          </label>
+          <label class="cursor-pointer">
+            <input type="radio" name="vs" value="upnow" class="peer sr-only" />
+            <div class="p-3 text-center rounded-lg border-2 border-slate-200 peer-checked:border-amber-500 peer-checked:bg-amber-50 text-sm font-bold transition">UPNOW<br/><span class="text-xs font-normal">(月額)</span></div>
+          </label>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl p-6 mb-6">
+        <div class="relative" style="height: 280px;">
+          <canvas id="sim-chart" role="img" aria-label="3年間累積コスト比較チャート"></canvas>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-white rounded-xl p-4 border border-slate-200">
+          <div class="text-xs text-slate-500">初期費用</div>
+          <div class="font-black text-xl number-big" id="sim-init">¥132,000</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-slate-200">
+          <div class="text-xs text-slate-500">月商合計</div>
+          <div class="font-black text-xl number-big" id="sim-rev-total">100万</div>
+        </div>
+        <div class="bg-green-50 rounded-xl p-4 border-2 border-green-500">
+          <div class="text-xs text-green-700 font-bold">1年目の節約額</div>
+          <div class="font-black text-xl text-green-700 number-big" id="sim-save-1y">¥— </div>
+        </div>
+        <div class="bg-green-50 rounded-xl p-4 border-2 border-green-500">
+          <div class="text-xs text-green-700 font-bold">3年間の節約額</div>
+          <div class="font-black text-xl text-green-700 number-big" id="sim-save-3y">¥—</div>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-500 mt-4 text-center">
+        ※ 試算は概算です。実際の料金は各サービスの最新条件をご確認ください。BlueReserve側はキャンペーン適用後の料金で計算。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Proof -->
+<section class="py-20 bg-slate-900 text-white">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <div class="text-sm font-bold text-blue-400 mb-3">▼ 実証済み</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">ブルーステージ合同会社 7拠点で稼働中</h2>
+      <p class="text-slate-400">同じシステムを毎日プロが運用しています</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6 mb-10">
+      <div class="bg-slate-800 p-6 rounded-2xl">
+        <div class="text-5xl font-black text-blue-400 number-big mb-2">7<span class="text-xl">拠点</span></div>
+        <div class="text-sm text-slate-300">京成小岩・神田・西新宿・上野御徒町・上野4A・上野4B・白金高輪</div>
+      </div>
+      <div class="bg-slate-800 p-6 rounded-2xl">
+        <div class="text-5xl font-black text-blue-400 number-big mb-2">99.9<span class="text-xl">%</span></div>
+        <div class="text-sm text-slate-300">稼働率（Vercel + Supabase + Stripeの実績）</div>
+      </div>
+      <div class="bg-slate-800 p-6 rounded-2xl">
+        <div class="text-5xl font-black text-blue-400 number-big mb-2">0<span class="text-xl">件</span></div>
+        <div class="text-sm text-slate-300">ダブルブッキング事故（DB物理制約による保証）</div>
+      </div>
+    </div>
+
+    <div class="bg-gradient-to-r from-blue-900 to-blue-700 p-8 rounded-2xl">
+      <div class="grid md:grid-cols-2 gap-8 items-center">
+        <div>
+          <div class="text-sm text-blue-200 font-bold mb-2">実例</div>
+          <div class="text-2xl md:text-3xl font-black mb-3">bluespacerental.com</div>
+          <p class="text-blue-100 leading-relaxed">本商品と同じコードで運用中の本番サイト。デザイン・機能・運用フローをそのままご覧いただけます。</p>
+        </div>
+        <div class="text-right">
+          <a href="https://bluespacerental.com" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-white text-blue-900 font-bold px-6 py-4 rounded-xl hover:bg-yellow-300 transition">
+            実物サイトを見る
+            <span>↗</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Flow -->
+<section class="py-20 bg-white">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <div class="text-sm font-bold text-blue-700 mb-3">▼ 導入の流れ</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">最短2週間で公開</h2>
+    </div>
+
+    <div class="grid md:grid-cols-4 gap-4">
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-3 rounded-full flex items-center justify-center text-white text-2xl font-black" style="background: var(--brand-3);">1</div>
+        <div class="font-black mb-1">ヒアリング</div>
+        <div class="text-xs text-slate-600">部屋数・料金体系・デザイン要望をお聞きします（30分）</div>
+      </div>
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-3 rounded-full flex items-center justify-center text-white text-2xl font-black" style="background: var(--brand-3);">2</div>
+        <div class="font-black mb-1">構築</div>
+        <div class="text-xs text-slate-600">Stripe・Google Calendar・Supabaseをセットアップ（1〜2週間）</div>
+      </div>
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-3 rounded-full flex items-center justify-center text-white text-2xl font-black" style="background: var(--brand-3);">3</div>
+        <div class="font-black mb-1">プレビュー</div>
+        <div class="text-xs text-slate-600">ステージング環境で確認・修正（3日）</div>
+      </div>
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-3 rounded-full flex items-center justify-center text-white text-2xl font-black" style="background: var(--brand-3);">4</div>
+        <div class="font-black mb-1">公開</div>
+        <div class="text-xs text-slate-600">独自ドメインに公開、運用マニュアル納品</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="py-20 bg-slate-50">
+  <div class="max-w-3xl mx-auto px-4">
+    <div class="text-center mb-12">
+      <div class="text-sm font-bold text-blue-700 mb-3">▼ よくある質問</div>
+      <h2 class="text-3xl md:text-4xl font-black mb-4">FAQ</h2>
+    </div>
+
+    <div class="space-y-3">
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>本当に予約手数料はかかりませんか？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          はい。BlueReserveの基本料金は買い切りです。継続的にかかるのはStripeのカード決済手数料3.6%（業界標準）のみで、これは決済代行会社へ直接支払われます。当社は予約成約手数料・月額利用料を一切いただきません（保守・オプションを契約された場合を除く）。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>インスタベースやスペマと併用できますか？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          できます。むしろ推奨です。インスタベース等を「新規集客チャネル」として活用しつつ、リピーターは自社予約サイトに誘導することで、徐々に手数料負担を減らせます。Google Calendarで双方向に在庫連動するので、ダブルブッキングは発生しません。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border-2 border-amber-400">
+        <summary class="flex items-center justify-between font-bold">
+          <span><span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded mr-2">★ MEO</span>Googleマップ集客（MEO）もお願いできますか？</span>
+          <span class="faq-icon text-2xl text-amber-600">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          はい、ZokujinAI（Googleマップ運用代行）として対応しています。月3,500円から、月4回のクチコミ投稿代行・口コミ返信代行・Googleビジネスプロフィール最適化までワンストップ。<br/>
+          <strong>「ポータル手数料からの卒業」を本気でやるなら、自社予約サイト＋Googleマップ集客のセットが最短ルートです。</strong><br/>
+          単独のご利用も可能ですが、BlueReserveと組み合わせると「Googleマップで上位表示→自社サイトで予約→手数料ゼロ」の導線が完成します。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>後から部屋を追加したい場合は？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          1部屋あたりの追加料金（プランごとの差額）でいつでも追加可能です。例: 1部屋プラン契約後に2部屋目を追加 → 差額¥33,000で2-3部屋プランに移行できます。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>デザインのカスタマイズはどこまでできますか？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          Next.jsベースなので完全自由です。よやクル・UPNOWのようなテンプレ固定ではありません。色・ロゴ・写真・コピー・レイアウトすべてご要望に応じて構築します。納品後の変更はClaude Code/Codex（AI）で即日対応するので、Web制作会社に頼むより圧倒的に早く・安く変更できます。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>保守は必須ですか？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          推奨ですが必須ではありません。月¥1,100からの保守プランをご用意していますが、不要であれば加入なしも可能です。ただしStripe・Supabaseなどの依存サービスは仕様変更があるため、長期運用には保守加入をおすすめします。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>インボイス（適格請求書）には対応していますか？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          対応しています。利用者向けに発行する領収書には貴社のインボイス番号を印字可能です。法人取引が多い拠点向けには「請求書払い（銀行振込）」機能も標準装備しています。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>キャンセル・返金はどう処理されますか？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          段階制キャンセルポリシー（例: 7日前まで全額返金 / 3日前まで50% / 当日0% など）を自由に設定でき、システムが自動で計算・Stripe経由で返金処理を行います。管理者が手動で介入することも可能です。
+        </div>
+      </details>
+      <details class="bg-white rounded-xl p-5 border border-slate-200">
+        <summary class="flex items-center justify-between font-bold">
+          <span>ソースコードは納品されますか？</span>
+          <span class="faq-icon text-2xl text-blue-700">＋</span>
+        </summary>
+        <div class="mt-4 text-sm text-slate-600 leading-relaxed">
+          基本プランでは「永続利用ライセンス + 当社による運用」の形態となります。完全ソースコード譲渡をご希望の場合は別途「完全譲渡プラン」（¥880,000〜）をご用意しています。
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section id="contact" class="py-20 hero-bg text-white">
+  <div class="max-w-5xl mx-auto px-4">
+    <div class="text-center mb-10">
+      <div class="inline-flex items-center gap-2 bg-white/15 backdrop-blur px-4 py-2 rounded-full text-sm mb-6">
+        <span class="w-2 h-2 rounded-full bg-green-400 badge-hot"></span>
+        <span>先着10社限定 30% OFF キャンペーン実施中</span>
+      </div>
+      <h2 class="text-3xl md:text-5xl font-black mb-6">無料で導入相談</h2>
+      <p class="text-lg text-blue-100">あなたの拠点規模に合わせた最適プランを30分でご提案します</p>
+    </div>
+
+    <div class="grid md:grid-cols-5 gap-6 items-start">
+      <!-- Form -->
+      <div class="md:col-span-3 bg-white rounded-2xl p-6 md:p-8 text-slate-800 shadow-2xl">
+        <form id="contact-form" class="space-y-4">
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-bold mb-1">お名前 <span class="text-red-500">*</span></label>
+              <input type="text" name="name" required class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="山田 太郎" />
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">会社名・屋号</label>
+              <input type="text" name="company" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="株式会社○○" />
+            </div>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-bold mb-1">メール <span class="text-red-500">*</span></label>
+              <input type="email" name="email" required class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="taro@example.com" />
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">電話番号</label>
+              <input type="tel" name="phone" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="090-1234-5678" />
+            </div>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-bold mb-1">運営拠点数 <span class="text-red-500">*</span></label>
+              <select name="rooms" required class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white">
+                <option value="">選択してください</option>
+                <option value="1部屋">1部屋</option>
+                <option value="2-3部屋">2-3部屋</option>
+                <option value="4-5部屋">4-5部屋</option>
+                <option value="6-10部屋">6-10部屋</option>
+                <option value="11-20部屋">11-20部屋</option>
+                <option value="21部屋以上">21部屋以上</option>
+                <option value="これから開業">これから開業</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">現在使っているサービス</label>
+              <select name="current" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white">
+                <option value="">選択してください</option>
+                <option value="インスタベース">インスタベース</option>
+                <option value="スペースマーケット">スペースマーケット</option>
+                <option value="よやクル">よやクル</option>
+                <option value="UPNOW">UPNOW</option>
+                <option value="自社サイト">自社サイト（自作）</option>
+                <option value="未利用">まだ使っていない</option>
+                <option value="その他">その他</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-bold mb-1">ご質問・ご要望（任意）</label>
+            <textarea name="message" rows="3" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="特定の機能について、ご予算、ご希望の納期など"></textarea>
+          </div>
+          <input type="hidden" name="product" value="BlueReserve" />
+          <input type="hidden" name="source" value="LP" />
+          <button type="submit" id="submit-btn" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-black px-6 py-4 rounded-xl transition text-lg">
+            無料相談を申し込む（30分）
+          </button>
+          <p class="text-xs text-slate-500 text-center">送信内容はSSL暗号化で安全に送信されます</p>
+        </form>
+
+        <!-- Success message -->
+        <div id="contact-success" class="hidden text-center py-10">
+          <div class="text-6xl mb-4">✅</div>
+          <div class="text-2xl font-black mb-2 text-green-700">送信完了しました</div>
+          <p class="text-slate-600">担当者より1〜2営業日以内にご連絡いたします</p>
+        </div>
+
+        <!-- Fallback message (if form not configured yet) -->
+        <div id="contact-fallback" class="hidden mt-4 p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-900">
+          現在お問い合わせフォームが調整中です。お手数ですが時間を置いて再度お試しください。
+        </div>
+      </div>
+
+      <!-- Side info -->
+      <div class="md:col-span-2 space-y-4">
+        <div class="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-6">
+          <div class="font-black text-lg mb-3 text-yellow-300">✓ ご相談で得られるもの</div>
+          <ul class="space-y-2 text-sm text-blue-50">
+            <li class="flex items-start gap-2"><span class="text-green-400">●</span> 拠点規模に応じた最適プランの提案</li>
+            <li class="flex items-start gap-2"><span class="text-green-400">●</span> 現在の手数料との具体的な比較試算</li>
+            <li class="flex items-start gap-2"><span class="text-green-400">●</span> 機能カスタマイズの相談</li>
+            <li class="flex items-start gap-2"><span class="text-green-400">●</span> 導入スケジュール・お見積り</li>
+          </ul>
+        </div>
+
+        <div class="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-6 text-sm">
+          <div class="font-black mb-3 text-yellow-300">こんな方におすすめ</div>
+          <div class="space-y-2 text-blue-50">
+            <div>「ポータル手数料を払い続けるのが嫌」</div>
+            <div>「自社ブランドでサイトを持ちたい」</div>
+            <div>「よやクル・UPNOWでは物足りない」</div>
+            <div>「SEO・データを資産化したい」</div>
+          </div>
+        </div>
+
+        <div class="text-center text-xs text-blue-200">
+          お問い合わせは上記フォームよりお願いいたします
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-12 grid grid-cols-3 gap-4 max-w-2xl mx-auto text-sm text-blue-100">
+      <div class="flex items-center justify-center gap-2"><span>✓</span> 相談無料</div>
+      <div class="flex items-center justify-center gap-2"><span>✓</span> 営業電話なし</div>
+      <div class="flex items-center justify-center gap-2"><span>✓</span> 最短即日返信</div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="bg-slate-900 text-slate-400 py-10">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="grid md:grid-cols-4 gap-8 mb-8">
+      <div class="md:col-span-2">
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-8 h-8 rounded-lg" style="background: linear-gradient(135deg, var(--brand-3), #60a5fa);"></div>
+          <span class="font-bold text-lg text-white">BlueReserve</span>
+        </div>
+        <p class="text-sm leading-relaxed">レンタルスペース運営者のための買い切り型自社予約システム。ブルーステージ合同会社が運営。</p>
+      </div>
+      <div>
+        <div class="font-bold text-white mb-3">サービス</div>
+        <ul class="space-y-2 text-sm">
+          <li><a href="#features" class="hover:text-white">機能一覧</a></li>
+          <li><a href="#pricing" class="hover:text-white">料金プラン</a></li>
+          <li><a href="#simulator" class="hover:text-white">節約シミュレーター</a></li>
+          <li><a href="#faq" class="hover:text-white">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="font-bold text-white mb-3">会社情報</div>
+        <ul class="space-y-2 text-sm">
+          <li>ブルーステージ合同会社</li>
+          <li>東京都</li>
+          <li><a href="https://bluespacerental.com" target="_blank" class="hover:text-white">実例サイト ↗</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="pt-6 border-t border-slate-800 text-xs text-center">
+      © 2026 BlueReserve. All rights reserved.
+    </div>
+  </div>
+</footer>
+
+<script>
+// ============ Comparison Table ============
+const features = [
+  { cat: '基本', name: '時間単位の予約', us: '✓', yo: '✓', diff: false },
+  { cat: '基本', name: 'ダブルブッキング物理防止', us: '★PostgreSQL EXCLUDE', yo: 'システム制御のみ', diff: true },
+  { cat: '基本', name: '予約変更（キャンセル不要）', us: '★標準装備', yo: '×不可', diff: true },
+  { cat: '決済', name: 'クレジットカード', us: '✓', yo: '✓', diff: false },
+  { cat: '決済', name: '請求書払い（法人・銀行振込）', us: '★標準装備', yo: '×不明', diff: true },
+  { cat: '決済', name: 'インボイス番号印字', us: '★標準装備', yo: '×不明', diff: true },
+  { cat: 'キャンセル', name: '段階制キャンセル自動返金', us: '★標準装備', yo: 'ポリシー設定のみ', diff: true },
+  { cat: '会員', name: '会員制+マイページ', us: '✓', yo: '✓', diff: false },
+  { cat: '会員', name: 'ポイント・会員ランク', us: '★オプション可', yo: '×非対応', diff: true },
+  { cat: '料金', name: '平日/土日料金・早割/直前割', us: '✓', yo: '✓', diff: false },
+  { cat: '料金', name: '動的価格（稼働率連動）', us: '★オプション可', yo: '×非対応', diff: true },
+  { cat: '通知', name: 'メール・LINE通知', us: '✓', yo: '✓', diff: false },
+  { cat: '通知', name: 'Discord/Slack/Webhook', us: '★標準装備', yo: '×非対応', diff: true },
+  { cat: '通知', name: 'SMS通知', us: '★オプション可', yo: '×非対応', diff: true },
+  { cat: 'カレンダー', name: 'Google Calendar双方向同期', us: '✓', yo: '✓', diff: false },
+  { cat: 'SEO', name: '構造化データ（LocalBusiness/FAQ）', us: '★標準装備', yo: '×不明', diff: true },
+  { cat: 'SEO', name: 'GA4・GTM完全連携', us: '★標準装備', yo: '×不明', diff: true },
+  { cat: 'API', name: 'API・Webhook公開', us: '★オプション可', yo: '×非対応', diff: true },
+  { cat: '会計', name: 'freee自動連携', us: '★オプション可', yo: '×非対応', diff: true },
+  { cat: 'カスタム', name: 'ページ完全カスタム（Next.js）', us: '★完全自由', yo: '×テンプレ固定', diff: true },
+  { cat: 'カスタム', name: 'AI(ClaudeCode/Codex)で即変更', us: '★標準装備', yo: '×非対応', diff: true },
+  { cat: '所有', name: 'データ・SEOの所有権', us: '★顧客100%', yo: 'サービス側管理', diff: true },
+];
+const tableEl = document.getElementById('compare-table');
+tableEl.innerHTML = features.map(f => {
+  const bg = f.diff ? 'bg-green-50' : '';
+  const usColor = f.us.startsWith('★') ? 'text-green-700 font-bold' : 'text-slate-700';
+  const yoColor = f.yo.startsWith('×') ? 'text-red-600' : 'text-slate-600';
+  return `<div class="grid grid-cols-12 p-4 text-sm border-t border-slate-100 ${bg} compare-row">
+    <div class="col-span-6">
+      <span class="text-xs text-slate-400">[${f.cat}]</span>
+      <span class="ml-1">${f.name}</span>
+    </div>
+    <div class="col-span-3 text-center ${usColor}">${f.us}</div>
+    <div class="col-span-3 text-center ${yoColor}">${f.yo}</div>
+  </div>`;
+}).join('');
+
+// ============ Simulator ============
+const fmt = n => Math.round(n).toLocaleString();
+const fmtMan = n => '¥' + Math.round(n).toLocaleString();
+
+function getMyPrice(rooms) {
+  if (rooms <= 1) return 55000;
+  if (rooms <= 3) return 88000;
+  if (rooms <= 5) return 132000;
+  if (rooms <= 10) return 198000;
+  if (rooms <= 20) return 297000;
+  return 495000;
+}
+function getYoyakul(rooms) {
+  if (rooms <= 5) return 4980;
+  if (rooms <= 10) return 7960;
+  if (rooms <= 15) return 10940;
+  return 13920;
+}
+function getCompetitorMonthly(vs, totalRev) {
+  switch(vs) {
+    case 'insta': return totalRev * 0.35;
+    case 'spacema': return totalRev * 0.30;
+    case 'yoyakul': return 0;
+    case 'upnow': return totalRev * 0.065;
+  }
+}
+
+let simChart;
+function updateSim() {
+  const rooms = +document.getElementById('sim-rooms').value;
+  const revPer = +document.getElementById('sim-rev').value * 10000;
+  const vs = document.querySelector('input[name="vs"]:checked').value;
+  const totalRev = rooms * revPer;
+
+  document.getElementById('sim-rooms-out').textContent = rooms + '部屋';
+  document.getElementById('sim-rev-out').textContent = (revPer/10000) + '万';
+  document.getElementById('sim-init').textContent = fmtMan(getMyPrice(rooms));
+  document.getElementById('sim-rev-total').textContent = (totalRev/10000) + '万';
+
+  // 36ヶ月分の累積コスト
+  const labels = [];
+  const myData = [];
+  const competitorData = [];
+  const myMonthlyCost = totalRev * 0.036; // Stripe手数料
+  let yoyakulRooms = rooms;
+
+  for (let m = 0; m <= 36; m += 3) {
+    labels.push(m === 0 ? '導入' : m + 'ヶ月');
+    myData.push(Math.round(getMyPrice(rooms) + myMonthlyCost * m));
+    let compCost;
+    if (vs === 'yoyakul') {
+      compCost = getYoyakul(yoyakulRooms) * m + totalRev * 0.036 * m;
+    } else if (vs === 'upnow') {
+      compCost = totalRev * 0.065 * m;
+    } else if (vs === 'insta') {
+      compCost = totalRev * 0.35 * m;
+    } else {
+      compCost = totalRev * 0.30 * m;
+    }
+    competitorData.push(Math.round(compCost));
+  }
+
+  // 1年・3年の節約額
+  const my1y = getMyPrice(rooms) + myMonthlyCost * 12;
+  const my3y = getMyPrice(rooms) + myMonthlyCost * 36;
+  let comp1y, comp3y;
+  if (vs === 'yoyakul') {
+    comp1y = getYoyakul(rooms) * 12 + totalRev * 0.036 * 12;
+    comp3y = getYoyakul(rooms) * 36 + totalRev * 0.036 * 36;
+  } else if (vs === 'upnow') {
+    comp1y = totalRev * 0.065 * 12;
+    comp3y = totalRev * 0.065 * 36;
+  } else if (vs === 'insta') {
+    comp1y = totalRev * 0.35 * 12;
+    comp3y = totalRev * 0.35 * 36;
+  } else {
+    comp1y = totalRev * 0.30 * 12;
+    comp3y = totalRev * 0.30 * 36;
+  }
+  const save1y = comp1y - my1y;
+  const save3y = comp3y - my3y;
+  document.getElementById('sim-save-1y').textContent = (save1y > 0 ? '' : '-') + '¥' + fmt(Math.abs(save1y));
+  document.getElementById('sim-save-3y').textContent = (save3y > 0 ? '' : '-') + '¥' + fmt(Math.abs(save3y));
+
+  const compName = {
+    'insta': 'インスタベース (35%)',
+    'spacema': 'スペースマーケット (30%)',
+    'yoyakul': 'よやクル',
+    'upnow': 'UPNOW (6.5%)',
+  }[vs];
+
+  if (simChart) simChart.destroy();
+  simChart = new Chart(document.getElementById('sim-chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: compName, data: competitorData, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.08)', fill: true, tension: 0.2, pointRadius: 3, borderWidth: 2 },
+        { label: 'BlueReserve', data: myData, borderColor: '#1e4d8c', backgroundColor: 'rgba(30,77,140,0.08)', fill: true, tension: 0.2, pointRadius: 3, borderWidth: 2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 12, weight: '600' } } },
+        tooltip: { callbacks: { label: v => v.dataset.label + ': ¥' + fmt(v.raw) } }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: v => v >= 10000 ? (Math.round(v/10000)) + '万' : v } }
+      }
+    }
+  });
+}
+document.querySelectorAll('#sim-rooms, #sim-rev, input[name="vs"]').forEach(el => {
+  el.addEventListener('input', updateSim);
+  el.addEventListener('change', updateSim);
+});
+updateSim();
+
+// ============ Contact Form (Google Apps Script) ============
+// ↓ Apps Script Webアプリの URL
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlw_K6nSa0YG519v32K6sY2uqiEQVsNxTr7kBpyHSs6FRkgEMr9GrUnNWNXB2fhpsx/exec';
+
+const contactForm = document.getElementById('contact-form');
+const contactSuccess = document.getElementById('contact-success');
+const contactFallback = document.getElementById('contact-fallback');
+const submitBtn = document.getElementById('submit-btn');
+
+contactForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  if (!APPS_SCRIPT_URL) {
+    contactFallback.classList.remove('hidden');
+    return;
+  }
+
+  const formData = new FormData(contactForm);
+  const payload = Object.fromEntries(formData);
+  payload.timestamp = new Date().toISOString();
+  payload.userAgent = navigator.userAgent.slice(0, 200);
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = '送信中...';
+
+  try {
+    // Apps Script は CORS の都合で no-cors モードでPOST（成功/失敗の応答は読まない）
+    // エラー時のみ catch でフォールバック
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    contactForm.classList.add('hidden');
+    contactSuccess.classList.remove('hidden');
+    contactSuccess.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (err) {
+    contactFallback.classList.remove('hidden');
+    submitBtn.disabled = false;
+    submitBtn.textContent = '無料相談を申し込む（30分）';
+  }
+});
+
+// ============ Scroll fade ============
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.scroll-fade').forEach(el => io.observe(el));
+</script>
+
+</body>
+</html>
