@@ -265,7 +265,7 @@ export default async function VenuePage({
       <section className="venue-section" id="availability">
         <h2>今週の空き状況（直近7日間）</h2>
         <p className="policy">
-          本日から7日間の予約可能時間の目安です（24時間営業 0:00〜24:00）。
+          本日から7日間の予約可能時間の目安です（24時間営業 0:00〜24:00）。先の日付は下の予約カレンダーから「次の週へ」でご予約いただけます（最大60日先まで）。
         </p>
         <AvailabilityDigest availability={initial} variant="week" />
       </section>
