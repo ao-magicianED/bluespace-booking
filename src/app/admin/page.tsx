@@ -81,6 +81,8 @@ export default async function AdminPage({
           {"　"}
           <Link href="/admin/venues" className="policy">🏢 拠点情報の編集（写真・FAQ・入退室案内）</Link>
           {"　"}
+          <Link href="/admin/coupons" className="policy">🎟️ クーポン発行</Link>
+          {"　"}
           <Link href="/admin/license" className="policy">🔑 ライセンス管理</Link>
           {"　"}
           <Link href="/" className="policy">← サイトを見る</Link>

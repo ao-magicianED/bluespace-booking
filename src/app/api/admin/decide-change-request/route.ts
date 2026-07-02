@@ -4,7 +4,7 @@ import { getDb } from "@/lib/supabase";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
 import { formatBookingPeriod } from "@/lib/confirm";
 import { checkTimeSlotAvailable } from "@/lib/change-request";
-import { applyApprovedTimeChange } from "@/app/api/admin/change-time/route";
+import { applyApprovedTimeChange } from "@/lib/apply-time-change";
 import type { Booking, BookingChangeRequest, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";

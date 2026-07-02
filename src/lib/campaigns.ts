@@ -1,20 +1,26 @@
 import { getDb } from "./supabase";
 import { sendMail } from "./mail";
 import { utcToJstDateStr } from "./slots";
+import { mapSearchUrl, siteUrl } from "./site-url";
 
 /**
  * 自動クーポン配布キャンペーン（毎日のCronから呼ぶ・冪等）。
  * ① thanks_next_day: 初回利用の翌日に10%OFF（有効期限2週間）
- * ② winback_30: 最後の利用から30日後、その後の予約がなければ10%OFF（有効期限1ヶ月）
- * ③ winback_90: 同90日後（有効期限1ヶ月）
+ * ② second_visit_thanks: 2回目利用の翌日に10%OFF（有効期限2週間）
+ * ③ winback_30: 最後の利用から30日後、その後の予約がなければ10%OFF（有効期限1ヶ月）
+ * ④ winback_90: 同90日後（有効期限1ヶ月）
  * 共通条件: 1回限り・最低利用金額¥2,000・本人のメールアドレス専用
+ *
+ * ①②には、Googleクチコミの任意のお願いと、アンケート回答特典クーポンの案内を添える
+ * （「レビュー投稿でクーポン」はGoogleのクチコミポリシー違反リスクがあるため、
+ *   クーポンの対価は必ずアンケート回答にひも付け、クチコミは無償の任意依頼として分離すること）。
  */
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
+const SITE = siteUrl();
 const MIN_AMOUNT = 2000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-type Kind = "thanks_next_day" | "winback_30" | "winback_90";
+type Kind = "thanks_next_day" | "second_visit_thanks" | "winback_30" | "winback_90";
 
 function genCode(prefix: string): string {
   // 紛らわしい文字（I/O/0/1）を除いたランダムコード
@@ -28,6 +34,33 @@ function jstDate(d: Date): string {
   return d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "long", day: "numeric" });
 }
 
+/**
+ * 直近利用拠点の住所からGoogleクチコミ依頼＋アンケート特典の案内ブロックを作る。
+ * SURVEY_FORM_URL 未設定の場合はアンケート特典の案内を省略する（壊れたリンクを送らないため）。
+ */
+function reviewAndSurveyBlock(venueAddress: string | null): string[] {
+  const surveyUrl = process.env.SURVEY_FORM_URL?.trim();
+  const lines: string[] = [];
+  if (venueAddress) {
+    lines.push(
+      ``,
+      `▼クチコミのお願い（任意）`,
+      `もしよろしければ、Googleマップから当スペースへのクチコミ投稿にご協力いただけると励みになります。`,
+      mapSearchUrl(venueAddress)
+    );
+  }
+  if (surveyUrl) {
+    lines.push(
+      ``,
+      `▼アンケートにご協力ください（回答特典あり）`,
+      `サービス改善のため、1分ほどのアンケートにご協力いただけますでしょうか。`,
+      `ご回答いただいた方には、次回のご利用で使える10%OFFクーポンをお送りする場合があります。`,
+      surveyUrl
+    );
+  }
+  return lines;
+}
+
 /** クーポン作成→メール送信→配布記録（メール失敗時はクーポンを取り消して次回再試行） */
 async function grantAndSend(opts: {
   email: string;
@@ -37,6 +70,7 @@ async function grantAndSend(opts: {
   validDays: number;
   intro: string[];
   now: Date;
+  venueAddress?: string | null;
 }): Promise<boolean> {
   const db = getDb();
   const code = genCode(opts.prefix);
@@ -90,6 +124,7 @@ async function grantAndSend(opts: {
       ``,
       `▼ご予約はこちら（予約時にクーポンコードを入力してください）`,
       SITE,
+      ...reviewAndSurveyBlock(opts.venueAddress ?? null),
       ``,
       `毎週・毎月の定期利用は常時10%OFFでご提供しています。`,
       `お見積もりは ${SITE}/contact からお気軽にご相談ください。`,
@@ -110,9 +145,32 @@ async function grantAndSend(opts: {
   return true;
 }
 
+/** 指定メール・終了時刻に一致する直近予約の拠点住所を引く（クチコミ案内のリンク生成用。失敗しても致命的でないのでnull許容） */
+async function lookupVenueAddress(
+  db: ReturnType<typeof getDb>,
+  email: string,
+  endAtIso: string
+): Promise<string | null> {
+  const { data } = await db
+    .from("bookings")
+    .select("venue_id")
+    .ilike("customer_email", email)
+    .eq("booking_status", "confirmed")
+    .eq("end_at", endAtIso)
+    .limit(1)
+    .maybeSingle<{ venue_id: string }>();
+  if (!data?.venue_id) return null;
+  const { data: venue } = await db
+    .from("venues")
+    .select("address")
+    .eq("id", data.venue_id)
+    .maybeSingle<{ address: string }>();
+  return venue?.address ?? null;
+}
+
 export async function runCouponCampaigns(
   now: Date = new Date()
-): Promise<{ thanks: number; winback30: number; winback90: number }> {
+): Promise<{ thanks: number; secondVisit: number; winback30: number; winback90: number }> {
   const db = getDb();
   const { data } = await db
     .from("bookings")
@@ -120,20 +178,14 @@ export async function runCouponCampaigns(
     .eq("booking_status", "confirmed")
     .limit(10000);
 
-  // 顧客（メール小文字）ごとに 初回終了・最終終了 を集計
-  const byEmail = new Map<string, { name: string; first: string; last: string }>();
+  // 顧客（メール小文字）ごとに、利用終了時刻を全件集めて時系列に並べる
+  // （1回目=first / 2回目=second / 最新=last の各終了時刻を判定するため）
+  const byEmail = new Map<string, { end_at: string; name: string }[]>();
   for (const r of data ?? []) {
     const email = r.customer_email.trim().toLowerCase();
-    const cur = byEmail.get(email);
-    if (!cur) {
-      byEmail.set(email, { name: r.customer_name, first: r.end_at, last: r.end_at });
-    } else {
-      if (r.end_at < cur.first) cur.first = r.end_at;
-      if (r.end_at > cur.last) {
-        cur.last = r.end_at;
-        cur.name = r.customer_name;
-      }
-    }
+    const arr = byEmail.get(email) ?? [];
+    arr.push({ end_at: r.end_at, name: r.customer_name });
+    byEmail.set(email, arr);
   }
 
   // JSTの日単位ウィンドウ（毎日1回のCronで各顧客がちょうど1度だけ該当する）
@@ -146,19 +198,24 @@ export async function runCouponCampaigns(
   const [a30, b30] = win(30);
   const [a90, b90] = win(90);
 
-  const result = { thanks: 0, winback30: 0, winback90: 0 };
-  for (const [email, info] of byEmail) {
-    const first = new Date(info.first);
-    const last = new Date(info.last);
+  const result = { thanks: 0, secondVisit: 0, winback30: 0, winback90: 0 };
+  for (const [email, rows] of byEmail) {
+    const sorted = [...rows].sort((a, b) => (a.end_at < b.end_at ? -1 : a.end_at > b.end_at ? 1 : 0));
+    const first = new Date(sorted[0].end_at);
+    const second = sorted.length >= 2 ? new Date(sorted[1].end_at) : null;
+    const last = new Date(sorted[sorted.length - 1].end_at);
+    const latestName = sorted[sorted.length - 1].name;
 
     // ① 初回利用が昨日終了 → サンクスクーポン（2週間有効）
     if (first >= y0 && first < y1) {
+      const venueAddress = await lookupVenueAddress(db, email, sorted[0].end_at);
       const ok = await grantAndSend({
         email,
-        name: info.name,
+        name: latestName,
         kind: "thanks_next_day",
         prefix: "THANKS",
         validDays: 14,
+        venueAddress,
         intro: [
           `先日はブルースペースをご利用いただき、誠にありがとうございました。`,
           `感謝の気持ちを込めて、次回のご予約で使える10%OFFクーポンをお届けします。`,
@@ -168,11 +225,30 @@ export async function runCouponCampaigns(
       if (ok) result.thanks++;
     }
 
+    // ①' 2回目利用が昨日終了 → 2回目サンクスクーポン（2週間有効）
+    if (second && second >= y0 && second < y1) {
+      const venueAddress = await lookupVenueAddress(db, email, sorted[1].end_at);
+      const ok = await grantAndSend({
+        email,
+        name: latestName,
+        kind: "second_visit_thanks",
+        prefix: "THANKS2",
+        validDays: 14,
+        venueAddress,
+        intro: [
+          `2回目のご利用、誠にありがとうございました。`,
+          `いつもご利用いただき感謝しております。次回のご予約で使える10%OFFクーポンをお届けします。`,
+        ],
+        now,
+      });
+      if (ok) result.secondVisit++;
+    }
+
     // ② 最後の利用から30日経過（その後の予約なし） → 掘り起こし（1ヶ月有効）
     if (last >= a30 && last < b30) {
       const ok = await grantAndSend({
         email,
-        name: info.name,
+        name: latestName,
         kind: "winback_30",
         prefix: "BACK30",
         validDays: 30,
@@ -189,7 +265,7 @@ export async function runCouponCampaigns(
     if (last >= a90 && last < b90) {
       const ok = await grantAndSend({
         email,
-        name: info.name,
+        name: latestName,
         kind: "winback_90",
         prefix: "BACK90",
         validDays: 30,

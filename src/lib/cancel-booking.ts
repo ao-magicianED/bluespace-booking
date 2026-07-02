@@ -2,8 +2,9 @@ import { getDb } from "./supabase";
 import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
 import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
+import { deleteBookingEvent } from "./google-calendar";
+import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
-import { google } from "googleapis";
 
 export type CancelResult = {
   ok: boolean;
@@ -104,22 +105,14 @@ export async function executeCancellation(params: {
     }
   }
 
-  // 3. Googleカレンダーのイベント削除（失敗してもDBは確定）
+  // 3. Googleカレンダーのイベント削除（失敗してもDBは確定・404/410は既に削除済みとして成功扱い）
   if (booking.calendar_event_id && venue?.calendar_id) {
     try {
-      const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64;
-      if (b64) {
-        const sa = JSON.parse(Buffer.from(b64, "base64").toString("utf-8"));
-        const auth = new google.auth.JWT({
-          email: sa.client_email,
-          key: sa.private_key,
-          scopes: ["https://www.googleapis.com/auth/calendar"],
-        });
-        await google.calendar({ version: "v3", auth }).events.delete({
-          calendarId: venue.calendar_id,
-          eventId: booking.calendar_event_id,
-        });
-      }
+      await deleteBookingEvent(venue.calendar_id, booking.calendar_event_id);
+      await db
+        .from("bookings")
+        .update({ calendar_sync_status: "none", updated_at: new Date().toISOString() })
+        .eq("id", booking.id);
     } catch (e) {
       console.error("[cancel] カレンダー削除失敗:", e);
       await sendAdminAlert(
@@ -131,7 +124,7 @@ export async function executeCancellation(params: {
 
   // 4. 通知メール
   const period = formatBookingPeriod(booking);
-  await sendMail({
+  const mailOk = await sendMail({
     to: booking.customer_email,
     subject: `【キャンセル完了】${venue?.name ?? ""} ${period}`,
     text: [
@@ -156,6 +149,21 @@ export async function executeCancellation(params: {
       "ブルーステージ合同会社",
     ].join("\n"),
   });
+  if (!mailOk) {
+    await sendAdminAlert(
+      "🚨 キャンセル完了メール送信失敗（要フォロー）",
+      `お客様へのキャンセル完了メールの送信に失敗しました。返金内容を電話等で個別に案内してください。\n\n予約ID: ${booking.id}\nお客様: ${booking.customer_name} <${booking.customer_email}> ${booking.customer_phone}`
+    );
+  }
+
+  // 返金行: ポリシー上ゼロ／返金成功／自動返金失敗（別アラート送信済み）を明確に区別する
+  const refundLine =
+    refundAmount === 0
+      ? "返金: なし（ポリシー適用）"
+      : refundId
+        ? `返金: ¥${refundAmount.toLocaleString()} 済み（Refund ID: ${refundId}）`
+        : `返金: ¥${refundAmount.toLocaleString()} ★自動返金に失敗しました（別途アラート済み・Stripeダッシュボードで手動対応してください）`;
+
   await sendAdminAlert(
     `予約キャンセル ${venue?.name ?? ""} ${period}`,
     [
@@ -165,9 +173,13 @@ export async function executeCancellation(params: {
       `日時: ${period}`,
       `お客様: ${booking.customer_name} <${booking.customer_email}>`,
       `元金額: ¥${effective.toLocaleString()}`,
-      `返金額: ¥${refundAmount.toLocaleString()}（${tierLabel}）`,
-      refundId ? `Stripe Refund ID: ${refundId}` : "返金処理: なし or 失敗",
+      `キャンセル手数料: ¥${feeAmount.toLocaleString()}（${tierLabel}）`,
+      `理由: ${reason || "(なし)"}`,
+      refundLine,
       `予約ID: ${booking.id}`,
+      ``,
+      `▼予約詳細`,
+      adminBookingUrl(booking.id),
     ].join("\n")
   );
 

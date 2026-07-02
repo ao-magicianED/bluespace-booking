@@ -53,6 +53,7 @@ export type Booking = {
   calendar_event_id: string | null;
   calendar_sync_status: "none" | "synced" | "failed";
   confirmation_email_sent_at: string | null;
+  reminder_email_sent_at: string | null;
   expires_at: string | null;
   cancelled_at: string | null;
   cancel_reason: string | null;

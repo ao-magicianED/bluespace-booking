@@ -7,7 +7,7 @@ import { buildQuote, QuoteError } from "@/lib/quote";
 import { getSessionUser } from "@/lib/auth-server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { calcInvoiceDueAt, createAndSendInvoice, isInvoiceEligible } from "@/lib/invoice";
-import { sendAdminAlert } from "@/lib/mail";
+import { sendAdminAlert, sendMail } from "@/lib/mail";
 import {
   jstToUtc,
   overlaps,
@@ -261,6 +261,31 @@ export async function POST(req: NextRequest) {
             `予約ID: ${bookingId}`,
           ].join("\n")
         );
+        // 自社ブランドの受付確認メール（Stripe発の請求書メールが迷惑メール判定された場合の保険）
+        await sendMail({
+          to: email,
+          subject: `【仮予約受付】${label} のご請求書について`,
+          text: [
+            `${name} 様`,
+            ``,
+            `ご予約ありがとうございます。以下の内容で仮予約を受け付けました。`,
+            `お支払い（銀行振込）の確認をもって本予約が確定します。`,
+            ``,
+            `▼ご予約内容`,
+            `拠点: ${label}`,
+            `会社: ${companyName}`,
+            `金額: ¥${breakdown.total.toLocaleString()}`,
+            `お支払い期限: ${expiresAt.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`,
+            ``,
+            hostedInvoiceUrl
+              ? [`▼請求書（お振込先はこちらから確認できます）`, hostedInvoiceUrl].join("\n")
+              : `請求書（お振込先記載）は別途Stripeよりメールでお送りしています。`,
+            ``,
+            `お支払い期限までに入金が確認できない場合、本予約は自動的にキャンセルとなりますのでご注意ください。`,
+            ``,
+            `ブルーステージ合同会社`,
+          ].join("\n"),
+        });
         return NextResponse.json({
           invoiceFlow: true,
           bookingId,

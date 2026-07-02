@@ -2,12 +2,22 @@ import Link from "next/link";
 import { getStripe } from "@/lib/stripe";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
-import type { Booking } from "@/lib/types";
+import { mapSearchUrl } from "@/lib/site-url";
+import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 type Result =
-  | { kind: "confirmed"; shortId: string; period: string; amount: number }
+  | {
+      kind: "confirmed";
+      shortId: string;
+      period: string;
+      amount: number;
+      bookingId: string;
+      isMember: boolean;
+      venueName: string;
+      venueAddress: string;
+    }
   | { kind: "processing" }
   | { kind: "unknown" };
 
@@ -33,11 +43,20 @@ async function verify(sessionId: string | undefined): Promise<Result> {
     if (!booking) return { kind: "unknown" };
 
     if (booking.booking_status === "confirmed") {
+      const { data: venue } = await getDb()
+        .from("venues")
+        .select("name, address")
+        .eq("id", booking.venue_id)
+        .maybeSingle<Pick<Venue, "name" | "address">>();
       return {
         kind: "confirmed",
         shortId: booking.id.replace(/-/g, "").slice(-8),
         period: formatBookingPeriod(booking),
         amount: booking.total_amount,
+        bookingId: booking.id,
+        isMember: booking.user_id != null,
+        venueName: venue?.name ?? "",
+        venueAddress: venue?.address ?? "",
       };
     }
     // 決済は済んでいるがWebhook処理が未着（数秒〜数分のラグ）
@@ -62,6 +81,18 @@ export default async function ThanksPage({
         <h1>ご予約ありがとうございます</h1>
         <p>決済が完了し、ご予約が確定しました。</p>
         <p>
+          スペース: {result.venueName}
+          <br />
+          {result.venueAddress && (
+            <>
+              住所: {result.venueAddress}（
+              <a href={mapSearchUrl(result.venueAddress)} target="_blank" rel="noopener noreferrer">
+                地図を見る
+              </a>
+              ）
+              <br />
+            </>
+          )}
           予約番号: <strong>{result.shortId}</strong>
           <br />
           日時: {result.period}
@@ -69,6 +100,14 @@ export default async function ThanksPage({
           お支払い金額: ¥{result.amount.toLocaleString()}
         </p>
         <p>確認メールをお送りしています。届かない場合は迷惑メールフォルダをご確認ください。</p>
+        <p>
+          <Link href={`/my/${result.bookingId}`}>マイページで予約を確認する（キャンセル・領収書発行も可能）</Link>
+        </p>
+        {!result.isMember && (
+          <p className="policy">
+            ご予約時のメールアドレスで会員登録いただくと、マイページから予約の確認・時間変更・キャンセル・領収書の発行ができるようになります。
+          </p>
+        )}
         <p>
           <Link href="/">トップへ戻る</Link>
         </p>
@@ -79,12 +118,13 @@ export default async function ThanksPage({
   if (result.kind === "processing") {
     return (
       <div className="thanks-box">
+        {/* Webhook処理の完了を待つ間、数秒おきに自動で再読み込みする */}
+        <meta httpEquiv="refresh" content="4" />
         <h1>決済を確認しています</h1>
         <p>
           お支払いは完了しています。予約の確定処理中です（通常1分以内）。
-          確定すると確認メールが届きます。
+          このページは自動的に更新されます。確定すると確認メールが届きます。
         </p>
-        <p>このページを再読み込みすると最新の状態が表示されます。</p>
         <p>
           <Link href="/">トップへ戻る</Link>
         </p>
