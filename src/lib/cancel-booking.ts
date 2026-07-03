@@ -56,6 +56,26 @@ export async function executeCancellation(params: {
     .eq("booking_id", booking.id)
     .eq("status", "pending_payment");
 
+  // 進行中の変更申請（承認待ち・延長の決済待ち）も取り下げる。
+  // 延長のCheckoutセッションが生きていると、キャンセル後に支払われてしまうため失効させる
+  const { data: staleCrs } = await db
+    .from("booking_change_requests")
+    .update({ status: "expired", decided_at: now.toISOString() })
+    .eq("booking_id", booking.id)
+    .in("status", ["pending", "pending_payment"])
+    .select("stripe_session_id");
+  for (const cr of (staleCrs ?? []) as { stripe_session_id: string | null }[]) {
+    if (cr.stripe_session_id) {
+      try {
+        const { getStripe } = await import("./stripe");
+        await getStripe().checkout.sessions.expire(cr.stripe_session_id);
+      } catch (e) {
+        // 既に完了/失効済みのセッションはexpireできないが、その場合は害がないので無視
+        console.error("[cancel] 延長Checkoutセッション失効失敗:", e);
+      }
+    }
+  }
+
   // 2. Stripe返金（複数PI対応）
   let refundId: string | null = null;
   if (refundAmount > 0) {
