@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { JST_OFFSET_MS } from "@/lib/slots";
 import MonthlyChart, { type MonthlyData } from "@/components/MonthlyChart";
+import { realizedRevenue } from "@/lib/ledger";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function AdminAnalyticsPage() {
     .limit(5000);
   const rows = (data ?? []) as Row[];
 
-  const net = (b: Row) => b.total_amount - (b.refunded_amount ?? 0);
+  const net = (b: Row) => realizedRevenue(b);
   const totalSales = rows.reduce((s, b) => s + net(b), 0);
 
   // ── 顧客分析（メール小文字一致で同一顧客とみなす） ──

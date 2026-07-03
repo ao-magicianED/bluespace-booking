@@ -69,6 +69,8 @@ export type Booking = {
   receipt_name_changed_at: string | null;
   /** 調整後の実効金額（null=調整なし、total_amountがそのまま有効） */
   adjusted_total: number | null;
+  /** 増額（追加請求・延長）で実際に支払われた累計額。減額の返金では変更しない（実収額計算に使う） */
+  extra_paid_amount: number;
 };
 
 export type AdjustmentType = "price_decrease" | "price_increase" | "cancel_fee_override";

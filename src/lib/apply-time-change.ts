@@ -37,6 +37,11 @@ export async function applyApprovedTimeChange(params: {
   if (amounts.newAmount !== currentEffective) {
     updates.adjusted_total = amounts.newAmount;
   }
+  // 増額分はここで初めて「実際に支払われた」ことが確定する（呼び出し元は決済完了後のみ
+  // extraAmount>0で呼ぶ。実収額の二重控除を避けるため adjusted_total とは別に積み上げる）
+  if (amounts.extraAmount > 0) {
+    updates.extra_paid_amount = (booking.extra_paid_amount ?? 0) + amounts.extraAmount;
+  }
 
   let actuallyRefunded = 0;
   let refundRemaining = 0;

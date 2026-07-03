@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
 import { jstToUtc, todayJst } from "@/lib/slots";
+import { realizedRevenue } from "@/lib/ledger";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -64,10 +65,14 @@ export default async function AdminPage({
   const monthStart = jstToUtc(todayJst().slice(0, 8) + "01", 0).toISOString();
   const [upcomingRes, monthRes, failedRes] = await Promise.all([
     db.from("bookings").select("id", { count: "exact", head: true }).eq("booking_status", "confirmed").gt("end_at", nowIso),
-    db.from("bookings").select("total_amount, refunded_amount").eq("booking_status", "confirmed").gte("start_at", monthStart),
+    db
+      .from("bookings")
+      .select("payment_status, total_amount, refunded_amount, extra_paid_amount")
+      .eq("booking_status", "confirmed")
+      .gte("start_at", monthStart),
     db.from("bookings").select("*, venues(name)").eq("booking_status", "confirmed").eq("calendar_sync_status", "failed").gt("end_at", nowIso),
   ]);
-  const monthSales = (monthRes.data ?? []).reduce((s, b) => s + b.total_amount - (b.refunded_amount ?? 0), 0);
+  const monthSales = (monthRes.data ?? []).reduce((s, b) => s + realizedRevenue(b), 0);
   const failed = (failedRes.data ?? []) as Row[];
 
   return (
