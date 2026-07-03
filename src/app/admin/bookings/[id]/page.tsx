@@ -44,6 +44,7 @@ export default async function AdminBookingDetailPage({
   const memberNo = (memberRes.data as { member_no: number } | null)?.member_no ?? null;
 
   const bd = booking.price_breakdown as Partial<PriceBreakdown> | null;
+  const isLiveMode = (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_live_");
   const effective = effectiveTotal(booking);
   const now = new Date();
   const canCancel =
@@ -87,6 +88,10 @@ export default async function AdminBookingDetailPage({
                 {booking.id}
                 <br />
                 <span className="policy">予約番号: {booking.id.replace(/-/g, "").slice(-8).toUpperCase()}</span>
+                <br />
+                <span className="policy">
+                  予約受付: {new Date(booking.created_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
+                </span>
               </td>
             </tr>
             <tr>
@@ -109,6 +114,12 @@ export default async function AdminBookingDetailPage({
                 人数: {booking.party_size != null ? `${booking.party_size}名` : "—"}　目的:{" "}
                 {booking.purpose || "—"}
                 <br />
+                {booking.customer_type === "corporate" && (
+                  <>
+                    企業名: {booking.company_name || "—"}
+                    <br />
+                  </>
+                )}
                 {memberNo != null && <>会員番号: {formatMemberNo(memberNo)}　</>}
                 {repeat ? (
                   <strong className={repeat.seq > 1 ? "repeat-badge" : ""}>
@@ -148,6 +159,8 @@ export default async function AdminBookingDetailPage({
                     ）
                   </span>
                 )}
+                <br />
+                支払い方法: {booking.payment_method === "invoice" ? "請求書払い（銀行振込）" : "カード決済"}
                 {(booking.refunded_amount ?? 0) > 0 && (
                   <>
                     <br />
@@ -182,7 +195,7 @@ export default async function AdminBookingDetailPage({
               <td>
                 {booking.stripe_payment_intent_id ? (
                   <a
-                    href={`https://dashboard.stripe.com/test/payments/${booking.stripe_payment_intent_id}`}
+                    href={`https://dashboard.stripe.com/${isLiveMode ? "" : "test/"}payments/${booking.stripe_payment_intent_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

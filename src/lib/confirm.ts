@@ -1,7 +1,10 @@
 import { getDb } from "./supabase";
-import { createBookingEvent, getBusyRanges } from "./google-calendar";
+import { createBookingEvent, getBusyRanges, type BookingEventDetails } from "./google-calendar";
 import { sendAdminAlert, sendMail } from "./mail";
 import { utcToJstDateStr, JST_OFFSET_MS } from "./slots";
+import { adminBookingUrl, adminLedgerUrl, mapSearchUrl, myBookingUrl } from "./site-url";
+import { SELF_CHANGE_CUTOFF_HOURS } from "./change-request";
+import type { PriceBreakdown } from "./pricing";
 import type { Booking, Venue } from "./types";
 
 function jstTime(iso: string): { hour: number; minute: number } {
@@ -21,6 +24,35 @@ export function formatBookingPeriod(b: Pick<Booking, "start_at" | "end_at">): st
   const endHour = end.hour === 0 && end.minute === 0 ? 24 : end.hour;
   const endMin = end.hour === 0 && end.minute === 0 ? 0 : end.minute;
   return `${date} ${fmtTime(start.hour, start.minute)}〜${fmtTime(endHour, endMin)}`;
+}
+
+function jstDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+}
+
+/** price_breakdown（unknown型のスナップショット）から安全にオプション内訳テキストを作る */
+function formatOptionsText(bd: Partial<PriceBreakdown> | null): string | null {
+  if (!bd?.options || bd.options.length === 0) return null;
+  return bd.options.map((o) => `${o.name} ¥${o.amount.toLocaleString()}`).join(" / ");
+}
+
+function paymentMethodLabel(booking: Booking): string {
+  return booking.payment_method === "invoice" ? "請求書払い（銀行振込）" : "カード決済";
+}
+
+function buildCalendarEventDetails(booking: Booking, venue: Venue): BookingEventDetails {
+  const bd = (booking.price_breakdown ?? null) as Partial<PriceBreakdown> | null;
+  return {
+    venueName: venue.name,
+    customerName: booking.customer_name,
+    companyName: booking.customer_type === "corporate" ? booking.company_name : null,
+    partySize: booking.party_size,
+    optionsText: formatOptionsText(bd),
+    amountText: `¥${booking.total_amount.toLocaleString()}`,
+    paymentMethodLabel: paymentMethodLabel(booking),
+    createdAtText: jstDateTime(booking.created_at),
+    adminUrl: adminBookingUrl(booking.id),
+  };
 }
 
 /**
@@ -60,6 +92,9 @@ export async function runConfirmationSideEffects(
             `日時: ${period}`,
             `予約ID: ${booking.id}`,
             `お客様: ${booking.customer_name} <${booking.customer_email}> ${booking.customer_phone}`,
+            ``,
+            `▼予約詳細`,
+            adminBookingUrl(booking.id),
           ].join("\n")
         );
       }
@@ -71,7 +106,8 @@ export async function runConfirmationSideEffects(
         venue.calendar_id,
         booking.id,
         new Date(booking.start_at),
-        new Date(booking.end_at)
+        new Date(booking.end_at),
+        buildCalendarEventDetails(booking, venue)
       );
       await db
         .from("bookings")
@@ -98,6 +134,9 @@ export async function runConfirmationSideEffects(
           `日時: ${period}`,
           `予約ID: ${booking.id}`,
           `お名前: ${booking.customer_name}`,
+          ``,
+          `▼予約詳細`,
+          adminBookingUrl(booking.id),
         ].join("\n")
       );
     }
@@ -119,14 +158,28 @@ export async function runConfirmationSideEffects(
         `▼ご予約内容`,
         `スペース: ${venue.name}`,
         `住所: ${venue.address}`,
+        `地図: ${mapSearchUrl(venue.address)}`,
         `日時: ${period}`,
         ...(booking.party_size ? [`ご利用人数: ${booking.party_size}名`] : []),
         `料金: ¥${booking.total_amount.toLocaleString()}（決済済み）`,
         `予約番号: ${booking.id.replace(/-/g, "").slice(-8)}`,
         ...accessSection,
         ``,
+        `▼予約の確認・変更・キャンセル（マイページ）`,
+        myBookingUrl(booking.id),
+        booking.user_id
+          ? `マイページから予約内容の確認・キャンセル・領収書の発行ができます。`
+          : `ご予約時のメールアドレス（${booking.customer_email}）で会員登録いただくと、マイページから予約の確認・キャンセル・領収書の発行ができます。`,
+        ``,
+        `▼延長・時間変更について`,
+        `ご利用時間の延長・変更は、利用開始${SELF_CHANGE_CUTOFF_HOURS}時間前までマイページの予約詳細からお手続きいただけます（延長は差額のお支払い完了で即時確定します）。`,
+        `それ以降のご変更・当日の延長は、このメールへの返信またはお電話でご相談ください。`,
+        ``,
+        `▼領収書について`,
+        `領収書（インボイス対応）はマイページの予約詳細から発行できます。`,
+        ``,
         `▼キャンセルについて`,
-        `キャンセルをご希望の場合は、このメールへの返信でご連絡ください。`,
+        `キャンセルをご希望の場合は、マイページからお手続きいただくか、このメールへの返信でご連絡ください。`,
         ``,
         `ブルーステージ合同会社`,
       ].join("\n"),
@@ -139,25 +192,51 @@ export async function runConfirmationSideEffects(
           updated_at: new Date().toISOString(),
         })
         .eq("id", booking.id);
+    } else {
+      await sendAdminAlert(
+        "🚨 確認メール送信失敗（要フォロー）",
+        [
+          `お客様への予約確定メールの送信に失敗しました。お客様は確認メールを受け取れていません。`,
+          `Cronで自動再試行されますが、届かない場合は電話でのフォローをご検討ください。`,
+          ``,
+          `拠点: ${venue.name}`,
+          `日時: ${period}`,
+          `お客様: ${booking.customer_name} <${booking.customer_email}> ${booking.customer_phone}`,
+          `予約ID: ${booking.id}`,
+        ].join("\n")
+      );
     }
   }
 
   // --- 管理者通知（初回確定時のみ） ---
   if (!notifyAdmin) return;
+  const bd = (booking.price_breakdown ?? null) as Partial<PriceBreakdown> | null;
+  const optionsText = formatOptionsText(bd);
   await sendAdminAlert(
-    `新規予約 ${venue.name} ${period}`,
+    `新規予約 ${venue.name} ${period} ¥${booking.total_amount.toLocaleString()}`,
     [
       `新しい予約が確定しました。`,
       ``,
       `拠点: ${venue.name}`,
       `日時: ${period}`,
-      `金額: ¥${booking.total_amount.toLocaleString()}`,
-      `お名前: ${booking.customer_name}`,
+      `金額: ¥${booking.total_amount.toLocaleString()}（${paymentMethodLabel(booking)}）`,
+      `お名前: ${booking.customer_name}${booking.customer_type === "corporate" && booking.company_name ? `（法人: ${booking.company_name}）` : ""}`,
       `人数: ${booking.party_size ?? "-"}名`,
       `メール: ${booking.customer_email}`,
       `電話: ${booking.customer_phone}`,
       `目的: ${booking.purpose || "(未記入)"}`,
+      `会員区分: ${booking.user_id ? "会員" : "ゲスト"}`,
+      optionsText ? `オプション: ${optionsText}` : `オプション: なし`,
+      bd?.discount ? `割引: ${bd.discount.kind === "last_minute" ? "直前割" : "早割"} -¥${bd.discount.amount.toLocaleString()}` : null,
+      booking.coupon_code ? `クーポン: ${booking.coupon_code}${bd?.coupon ? `（-¥${bd.coupon.amount.toLocaleString()}）` : ""}` : null,
+      `予約受付: ${jstDateTime(booking.created_at)}`,
       `予約ID: ${booking.id}`,
-    ].join("\n")
+      ``,
+      `▼管理画面`,
+      `予約詳細: ${adminBookingUrl(booking.id)}`,
+      `予約台帳: ${adminLedgerUrl()}`,
+    ]
+      .filter((line): line is string => line != null)
+      .join("\n")
   );
 }

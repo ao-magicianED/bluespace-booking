@@ -4,8 +4,9 @@ import { getStripe } from "@/lib/stripe";
 import { getDb } from "@/lib/supabase";
 import { runConfirmationSideEffects, formatBookingPeriod } from "@/lib/confirm";
 import { sendMail, sendAdminAlert } from "@/lib/mail";
+import { adminBookingUrl, myBookingUrl } from "@/lib/site-url";
 import type { Booking, BookingAdjustment, BookingChangeRequest, Venue } from "@/lib/types";
-import { applyApprovedTimeChange } from "@/app/api/admin/change-time/route";
+import { applyApprovedTimeChange } from "@/lib/apply-time-change";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
       case "invoice.voided":
       case "invoice.marked_uncollectible":
         await handleInvoiceVoided(event.data.object as Stripe.Invoice);
+        break;
+      case "refund.failed":
+        await handleRefundFailed(event.data.object as Stripe.Refund);
         break;
       default:
         break;
@@ -344,18 +348,142 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   }
 }
 
-/** 請求書が無効化された（期限切れ処理・手動void等）→ 仮押さえを解放 */
+/**
+ * 請求書が無効化された（Cronの期限切れ処理・Stripeダッシュボードからの手動void等）→ 仮押さえを解放。
+ * Cron側（/api/cron/maintenance）で既に期限切れ処理済みの場合は更新0件になるため、
+ * その場合は通知せず二重送信を防ぐ（Cron側が既にお客様・管理者へ通知済みのため）。
+ */
 async function handleInvoiceVoided(invoice: Stripe.Invoice): Promise<void> {
   const db = getDb();
   const bookingId = invoice.metadata?.booking_id;
   if (!bookingId) return;
-  const { error } = await db
+
+  const { data: updated, error } = await db
     .from("bookings")
     .update({ booking_status: "expired", updated_at: new Date().toISOString() })
     .eq("id", bookingId)
     .eq("stripe_invoice_id", invoice.id as string)
-    .eq("booking_status", "pending");
+    .eq("booking_status", "pending")
+    .select("*");
   if (error) throw new Error(`請求書無効化処理エラー: ${error.message}`);
+  const booking = ((updated ?? []) as Booking[])[0];
+  if (!booking) return; // 既に処理済み（Cron等）
+
+  const { data: venue } = await db
+    .from("venues")
+    .select("name")
+    .eq("id", booking.venue_id)
+    .maybeSingle<{ name: string }>();
+  const period = formatBookingPeriod(booking);
+
+  await sendMail({
+    to: booking.customer_email,
+    subject: `【ご予約キャンセルのお知らせ】${venue?.name ?? ""} ${period}`,
+    text: [
+      `${booking.customer_name} 様`,
+      "",
+      "請求書が無効化されたため、以下のご予約はキャンセルされました。",
+      "",
+      `スペース: ${venue?.name ?? ""}`,
+      `日時: ${period}`,
+      "",
+      "引き続きご利用をご希望の場合は、お手数ですが再度ご予約ください。",
+      "ご不明な点がございましたら、このメールへの返信でご連絡ください。",
+      "ブルーステージ合同会社",
+    ].join("\n"),
+  });
+  await sendAdminAlert(
+    "請求書の無効化により予約をキャンセルしました",
+    [
+      `Stripe側で請求書が無効化(void / uncollectible)されたため、予約を自動キャンセルしました。`,
+      `管理画面から手動でvoidした場合はこの通知は想定通りです。心当たりがない場合はStripeダッシュボードをご確認ください。`,
+      ``,
+      `拠点: ${venue?.name ?? ""}`,
+      `日時: ${period}`,
+      `お客様: ${booking.customer_name} <${booking.customer_email}>`,
+      `予約ID: ${booking.id}`,
+      ``,
+      `▼予約詳細`,
+      adminBookingUrl(booking.id),
+    ].join("\n")
+  );
+}
+
+/** 返金が非同期に失敗した（refund.failed）→ 手動対応が必要。お客様には自動返金と案内済みの可能性があるため要注意 */
+async function handleRefundFailed(refund: Stripe.Refund): Promise<void> {
+  const db = getDb();
+  const piId = typeof refund.payment_intent === "string" ? refund.payment_intent : refund.payment_intent?.id;
+  if (!piId) {
+    await sendAdminAlert(
+      "🚨 返金失敗（payment_intent不明）",
+      `Refund ${refund.id} が失敗しましたが、payment_intentが特定できません。Stripeダッシュボードで確認してください。\n失敗理由: ${refund.failure_reason ?? "不明"}\n金額: ¥${refund.amount.toLocaleString()}`
+    );
+    return;
+  }
+
+  // 主決済PI（bookings）→ 追加請求PI（booking_adjustments）の順で予約を特定
+  let booking: Booking | null = null;
+  const { data: mainMatch } = await db
+    .from("bookings")
+    .select("*")
+    .eq("stripe_payment_intent_id", piId)
+    .maybeSingle<Booking>();
+  booking = mainMatch ?? null;
+  if (!booking) {
+    const { data: adj } = await db
+      .from("booking_adjustments")
+      .select("booking_id")
+      .eq("stripe_payment_intent_id", piId)
+      .maybeSingle<{ booking_id: string }>();
+    if (adj?.booking_id) {
+      const { data: b } = await db
+        .from("bookings")
+        .select("*")
+        .eq("id", adj.booking_id)
+        .maybeSingle<Booking>();
+      booking = b ?? null;
+    }
+  }
+
+  if (!booking) {
+    await sendAdminAlert(
+      "🚨 返金失敗（予約が特定できません・手動対応必要）",
+      `Refund ${refund.id}（PaymentIntent: ${piId}）が失敗しましたが、対応する予約が見つかりません。Stripeダッシュボードで手動対応してください。\n失敗理由: ${refund.failure_reason ?? "不明"}\n金額: ¥${refund.amount.toLocaleString()}`
+    );
+    return;
+  }
+
+  await sendAdminAlert(
+    "🚨 返金失敗（手動対応必要）",
+    [
+      `Stripeでの返金処理が失敗しました。お客様には既に「返金します」とご案内済みの可能性があります。`,
+      `至急Stripeダッシュボードで返金状況を確認し、必要なら別の方法（別カード情報の確認等）で手動対応してください。`,
+      ``,
+      `予約ID: ${booking.id}`,
+      `お客様: ${booking.customer_name} <${booking.customer_email}>`,
+      `失敗金額: ¥${refund.amount.toLocaleString()}`,
+      `失敗理由: ${refund.failure_reason ?? "不明"}`,
+      `Refund ID: ${refund.id}`,
+      ``,
+      `▼予約詳細`,
+      adminBookingUrl(booking.id),
+    ].join("\n")
+  );
+
+  await sendMail({
+    to: booking.customer_email,
+    subject: `【重要】ご返金処理についてのご連絡`,
+    text: [
+      `${booking.customer_name} 様`,
+      "",
+      "ご返金のお手続き中に問題が発生し、自動でのご返金が完了しませんでした。",
+      "お手数をおかけいたしますが、担当より個別にご連絡させていただきますので少々お待ちください。",
+      "",
+      "ご不明な点がございましたら、このメールへの返信でご連絡ください。",
+      "",
+      "ブルーステージ合同会社",
+    ].join("\n"),
+  });
 }
 
 async function handleExpired(session: Stripe.Checkout.Session): Promise<void> {
@@ -363,38 +491,82 @@ async function handleExpired(session: Stripe.Checkout.Session): Promise<void> {
 
   // 時間変更（延長）Checkoutの期限切れ
   if (session.metadata?.change_request_id) {
-    await db
+    const { data: updatedCr } = await db
       .from("booking_change_requests")
       .update({ status: "expired", decided_at: new Date().toISOString() })
       .eq("id", session.metadata.change_request_id)
       .eq("stripe_session_id", session.id)
-      .eq("status", "pending_payment");
+      .eq("status", "pending_payment")
+      .select("booking_id");
+    const crBookingId = ((updatedCr ?? []) as { booking_id: string }[])[0]?.booking_id;
+    if (!crBookingId) return; // 既に処理済み（二重通知防止）
+
     await sendAdminAlert(
       "⚠️ 予約延長の決済期限切れ",
       `予約延長の追加お支払いの期限が切れました。\n変更申請ID: ${session.metadata.change_request_id}\n元の予約時間のままです。`
     );
+    const { data: booking } = await db
+      .from("bookings")
+      .select("*")
+      .eq("id", crBookingId)
+      .maybeSingle<Booking>();
+    if (booking) {
+      await sendMail({
+        to: booking.customer_email,
+        subject: `【お知らせ】予約延長のお支払い期限が切れました`,
+        text: [
+          `${booking.customer_name} 様`,
+          "",
+          "予約延長の追加お支払いの期限が切れたため、延長は反映されず、元のご予約内容のままとなっております。",
+          "",
+          `現在のご予約: ${formatBookingPeriod(booking)}`,
+          "",
+          "改めて延長をご希望の場合は、マイページから再度お手続きください。",
+          `マイページ: ${myBookingUrl(booking.id)}`,
+          "",
+          "ブルーステージ合同会社",
+        ].join("\n"),
+      });
+    }
     return;
   }
 
   // 追加請求の期限切れ
   if (session.metadata?.adjustment_id) {
-    await db
+    const { data: updatedAdj } = await db
       .from("booking_adjustments")
       .update({ status: "expired" })
       .eq("id", session.metadata.adjustment_id)
       .eq("stripe_session_id", session.id)
-      .eq("status", "pending_payment");
+      .eq("status", "pending_payment")
+      .select("booking_id, previous_amount, new_amount");
+    const adj = ((updatedAdj ?? []) as BookingAdjustment[])[0];
+    if (!adj) return; // 既に処理済み
 
-    const { data: adj } = await db
-      .from("booking_adjustments")
-      .select("booking_id, previous_amount, new_amount")
-      .eq("id", session.metadata.adjustment_id)
-      .maybeSingle();
-    if (adj) {
-      await sendAdminAlert(
-        "⚠️ 追加請求の決済期限切れ",
-        `追加お支払いの期限が切れました。\n予約ID: ${adj.booking_id}\n変更: ¥${(adj as BookingAdjustment).previous_amount.toLocaleString()} → ¥${(adj as BookingAdjustment).new_amount.toLocaleString()}`
-      );
+    await sendAdminAlert(
+      "⚠️ 追加請求の決済期限切れ",
+      `追加お支払いの期限が切れました。\n予約ID: ${adj.booking_id}\n変更: ¥${adj.previous_amount.toLocaleString()} → ¥${adj.new_amount.toLocaleString()}`
+    );
+    const { data: booking } = await db
+      .from("bookings")
+      .select("*")
+      .eq("id", adj.booking_id)
+      .maybeSingle<Booking>();
+    if (booking) {
+      await sendMail({
+        to: booking.customer_email,
+        subject: `【お知らせ】追加お支払いの期限が切れました`,
+        text: [
+          `${booking.customer_name} 様`,
+          "",
+          "ご案内していた追加お支払いの期限が切れたため、料金変更は反映されておりません。",
+          "",
+          `現在のご予約金額: ¥${adj.previous_amount.toLocaleString()}`,
+          "",
+          "ご不明な点がございましたら、このメールへの返信でご連絡ください。",
+          "ブルーステージ合同会社",
+        ].join("\n"),
+      });
     }
     return;
   }

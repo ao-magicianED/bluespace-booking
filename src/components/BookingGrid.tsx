@@ -127,7 +127,9 @@ export default function BookingGrid({
   const [companyName, setCompanyName] = useState(initialForm?.companyName ?? "");
   const [partySize, setPartySize] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState<"card" | "invoice">("card");
-  const [invoiceDone, setInvoiceDone] = useState<{ dueAt: string } | null>(null);
+  const [invoiceDone, setInvoiceDone] = useState<{ dueAt: string; hostedInvoiceUrl: string | null } | null>(
+    null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [canceledNotice, setCanceledNotice] = useState(false);
@@ -455,7 +457,7 @@ export default function BookingGrid({
         return;
       }
       if (json.invoiceFlow) {
-        setInvoiceDone({ dueAt: json.dueAt });
+        setInvoiceDone({ dueAt: json.dueAt, hostedInvoiceUrl: json.hostedInvoiceUrl ?? null });
         setSubmitting(false);
         return;
       }
@@ -951,6 +953,14 @@ export default function BookingGrid({
                   minute: "2-digit",
                 })}
                 。入金確認後、予約確定メールをお送りします。それまでこの枠はお客様用に確保されます。
+                {invoiceDone.hostedInvoiceUrl && (
+                  <>
+                    <br />
+                    <a href={invoiceDone.hostedInvoiceUrl} target="_blank" rel="noopener noreferrer">
+                      請求書を今すぐ開く（お振込先の確認）→
+                    </a>
+                  </>
+                )}
               </div>
             ) : (
               <button className="submit-btn" onClick={submit} disabled={!canSubmit || data.calendarError}>

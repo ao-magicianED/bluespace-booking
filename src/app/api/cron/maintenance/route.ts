@@ -5,6 +5,9 @@ import { refreshHolidays } from "@/lib/holidays";
 import { runCouponCampaigns } from "@/lib/campaigns";
 import { voidInvoice } from "@/lib/invoice";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
+import { mapSearchUrl, myBookingUrl } from "@/lib/site-url";
+import { SELF_CHANGE_CUTOFF_HOURS } from "@/lib/change-request";
+import { utcToJstDateStr } from "@/lib/slots";
 import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +34,8 @@ export async function GET(req: NextRequest) {
     holidays: 0,
     invoicesVoided: 0,
     changeRequestsExpired: 0,
-    coupons: { thanks: 0, winback30: 0, winback90: 0 },
+    remindersSent: 0,
+    coupons: { thanks: 0, secondVisit: 0, winback30: 0, winback90: 0 },
   };
 
   // -1. 古い変更申請（pending 72h以上 / pending_payment 72h以上）を期限切れに
@@ -104,16 +108,16 @@ export async function GET(req: NextRequest) {
     result.expired = expiredCount ?? 0;
   }
 
-  // 2. カレンダー同期失敗の再試行（直近の確定予約のみ）
+  // 2. カレンダー同期失敗 or 確認メール未送信の再試行（直近の確定予約のみ）
   const { data: failed, error: failedError } = await db
     .from("bookings")
     .select("*")
     .eq("booking_status", "confirmed")
-    .eq("calendar_sync_status", "failed")
+    .or("calendar_sync_status.eq.failed,confirmation_email_sent_at.is.null")
     .gt("end_at", new Date().toISOString())
     .limit(20);
   if (failedError) {
-    console.error("[cron] 同期失敗予約の取得エラー:", failedError);
+    console.error("[cron] 同期/メール失敗予約の取得エラー:", failedError);
   } else {
     for (const booking of (failed ?? []) as Booking[]) {
       const { data: venue } = await db
@@ -131,6 +135,62 @@ export async function GET(req: NextRequest) {
       if (after?.calendar_sync_status === "synced") result.calendarRetried++;
       else result.calendarFailed++;
     }
+  }
+
+  // 2-b. 前日リマインダー（明日JST開始のconfirmed予約・冪等）
+  try {
+    const tomorrowJst = utcToJstDateStr(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    const dayStart = new Date(`${tomorrowJst}T00:00:00+09:00`);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    const { data: upcoming } = await db
+      .from("bookings")
+      .select("*")
+      .eq("booking_status", "confirmed")
+      .is("reminder_email_sent_at", null)
+      .gte("start_at", dayStart.toISOString())
+      .lt("start_at", dayEnd.toISOString())
+      .limit(200);
+    for (const b of (upcoming ?? []) as Booking[]) {
+      const { data: venue } = await db.from("venues").select("*").eq("id", b.venue_id).maybeSingle<Venue>();
+      if (!venue) continue;
+      const accessSection = venue.access_info?.trim()
+        ? [``, `▼入退室のご案内`, venue.access_info.trim()]
+        : [];
+      const ok = await sendMail({
+        to: b.customer_email,
+        subject: `【明日のご予約】${venue.name} ${formatBookingPeriod(b)}`,
+        text: [
+          `${b.customer_name} 様`,
+          ``,
+          `明日のご予約が近づいてまいりましたので、ご案内いたします。`,
+          ``,
+          `▼ご予約内容`,
+          `スペース: ${venue.name}`,
+          `住所: ${venue.address}`,
+          `地図: ${mapSearchUrl(venue.address)}`,
+          `日時: ${formatBookingPeriod(b)}`,
+          ...accessSection,
+          ``,
+          `▼延長・時間変更について`,
+          `ご利用時間の延長・変更は、利用開始${SELF_CHANGE_CUTOFF_HOURS}時間前まで下記マイページからお手続きいただけます。`,
+          ``,
+          `▼マイページ`,
+          myBookingUrl(b.id),
+          ``,
+          `当日は気をつけてお越しください。`,
+          `ブルーステージ合同会社`,
+        ].join("\n"),
+      });
+      if (ok) {
+        await db
+          .from("bookings")
+          .update({ reminder_email_sent_at: new Date().toISOString() })
+          .eq("id", b.id);
+        result.remindersSent++;
+      }
+    }
+  } catch (e) {
+    console.error("[cron] リマインダー送信エラー:", e);
   }
 
   // 3. 自動クーポン配布（初回サンクス・30日/90日掘り起こし。冪等）

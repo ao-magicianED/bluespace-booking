@@ -13,6 +13,7 @@ import {
   EXTEND_CHECKOUT_EXPIRY_SECONDS,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
+import { adminBookingUrl, myBookingUrl, siteUrl } from "@/lib/site-url";
 import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
   if (isExtend) {
     // 延長: Stripe Checkout で追加請求
     const stripe = getStripe();
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://bluespacerental.com";
+    const baseUrl = siteUrl();
     const oldPeriod = formatBookingPeriod(booking);
     const newPeriod = formatBookingPeriod({ start_at: start.toISOString(), end_at: end.toISOString() });
 
@@ -219,6 +220,7 @@ export async function POST(req: NextRequest) {
       `理由: ${reason || "(なし)"}`,
       "",
       "申請が72時間以内に処理されなかった場合は、自動的に取り下げとなります。",
+      `マイページ: ${myBookingUrl(bookingId)}`,
       "",
       "ブルーステージ合同会社",
     ].join("\n"),
@@ -232,7 +234,7 @@ export async function POST(req: NextRequest) {
       amounts.refundAmount > 0 ? `差額返金見込み: ¥${amounts.refundAmount.toLocaleString()}` : `料金: 据え置き`,
       `理由: ${reason || "(なし)"}`,
       "",
-      `承認/却下: ${process.env.NEXT_PUBLIC_BASE_URL || "https://bluespacerental.com"}/admin/bookings/${bookingId}`,
+      `承認/却下: ${adminBookingUrl(bookingId)}`,
     ].join("\n")
   );
 
