@@ -4,7 +4,6 @@ import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
 import { computeRepeatNumbers, formatMemberNo, realizedRevenue } from "@/lib/ledger";
-import { effectiveTotal } from "@/lib/adjustment";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -101,8 +100,7 @@ export default async function AdminLedgerPage({
           <tbody>
             {rows.map((b) => {
               const rep = repeat.get(b.id);
-              const eff = effectiveTotal(b);
-              const net = eff - (b.refunded_amount ?? 0);
+              const net = realizedRevenue(b);
               return (
                 <tr key={b.id}>
                   <td>
