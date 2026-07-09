@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
+import { UUID_RE } from "@/lib/reviews";
 
 export const dynamic = "force-dynamic";
 
@@ -24,40 +25,49 @@ export async function POST(req: NextRequest) {
   }
 
   const reviewId = body.reviewId ?? "";
-  if (!/^[0-9a-f-]{36}$/.test(reviewId)) {
+  if (!UUID_RE.test(reviewId)) {
     return NextResponse.json({ error: "レビューIDが不正です" }, { status: 400 });
   }
 
   const db = getDb();
 
+  // 対象行なし（存在しないID）を404で見分けられるよう、更新結果の行を select で受け取る
+  const notFound = () => NextResponse.json({ error: "対象のレビューが見つかりません" }, { status: 404 });
+
   if (body.action === "publish") {
-    const { error } = await db
+    const { data, error } = await db
       .from("booking_reviews")
       .update({ status: "published", published_at: new Date().toISOString() })
-      .eq("id", reviewId);
+      .eq("id", reviewId)
+      .select("id");
     if (error) return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
+    if (!data || data.length === 0) return notFound();
     return NextResponse.json({ ok: true });
   }
 
   if (body.action === "reject") {
-    const { error } = await db
+    const { data, error } = await db
       .from("booking_reviews")
       .update({ status: "rejected" })
-      .eq("id", reviewId);
+      .eq("id", reviewId)
+      .select("id");
     if (error) return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
+    if (!data || data.length === 0) return notFound();
     return NextResponse.json({ ok: true });
   }
 
   if (body.action === "reply") {
     const reply = String(body.reply ?? "").trim().slice(0, 1000);
-    const { error } = await db
+    const { data, error } = await db
       .from("booking_reviews")
       .update({
         host_reply: reply || null,
         host_replied_at: reply ? new Date().toISOString() : null,
       })
-      .eq("id", reviewId);
+      .eq("id", reviewId)
+      .select("id");
     if (error) return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
+    if (!data || data.length === 0) return notFound();
     return NextResponse.json({ ok: true });
   }
 

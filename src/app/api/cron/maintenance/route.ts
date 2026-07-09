@@ -239,6 +239,16 @@ export async function GET(req: NextRequest) {
       .gt("end_at", lookbackIso)
       .limit(200);
     for (const b of (ended ?? []) as Booking[]) {
+      // 送信前にreview_request_sent_atを予約的に確保（cronの並行実行・タイムアウト再試行での
+      // 二重送信を防ぐ）。まだnullの行だけ更新できた場合のみ「自分がこの予約を担当する」とみなす
+      const { data: claimed } = await db
+        .from("bookings")
+        .update({ review_request_sent_at: new Date().toISOString() })
+        .eq("id", b.id)
+        .is("review_request_sent_at", null)
+        .select("id");
+      if (!claimed || claimed.length === 0) continue; // 他の実行が既に処理済み
+
       const { data: venue } = await db
         .from("venues")
         .select("name")
@@ -266,11 +276,10 @@ export async function GET(req: NextRequest) {
         ].join("\n"),
       });
       if (ok) {
-        await db
-          .from("bookings")
-          .update({ review_request_sent_at: new Date().toISOString() })
-          .eq("id", b.id);
         result.reviewRequestsSent++;
+      } else {
+        // 送信失敗時は確保を解除し、次回cronで再試行できるようにする
+        await db.from("bookings").update({ review_request_sent_at: null }).eq("id", b.id);
       }
     }
   } catch (e) {

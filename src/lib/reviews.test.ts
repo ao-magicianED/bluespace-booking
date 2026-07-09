@@ -4,6 +4,7 @@ import {
   isReviewEligible,
   normalizeReviewInput,
   REVIEW_COMMENT_MAX,
+  UUID_RE,
 } from "./reviews";
 
 describe("aggregateReviews", () => {
@@ -90,5 +91,35 @@ describe("normalizeReviewInput", () => {
     if (r.ok) expect(r.comment.length).toBe(REVIEW_COMMENT_MAX);
     const r2 = normalizeReviewInput({ rating: 3 });
     if (r2.ok) expect(r2.comment).toBe("");
+  });
+
+  it("制御文字・Bidi制御文字を除去する（表示崩し対策）", () => {
+    // \x/\uエスケープシーケンスで組み立てる。ソースファイルに生の制御バイトを
+    // 直接埋め込むとgitにバイナリファイル扱いされてしまうため、必ずエスケープで書く。
+    // NUL・ベル・DELと、Bidi override（RLO ‮ 〜 PDF ‬）を混入させる
+    const dirty = "A\x00B\x07C\x7fD‮E‬F";
+    const r = normalizeReviewInput({ rating: 4, comment: dirty });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.comment).toBe("ABCDEF");
+  });
+
+  it("改行・タブは保持する（コメントの改行は表示に必要）", () => {
+    const r = normalizeReviewInput({ rating: 4, comment: "1行目\n2行目\tタブ" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.comment).toBe("1行目\n2行目\tタブ");
+  });
+});
+
+describe("UUID_RE", () => {
+  it("正しいUUID形式のみ受理する", () => {
+    expect(UUID_RE.test("a1b2c3d4-e5f6-4789-a123-b4c5d6e7f890")).toBe(true);
+  });
+
+  it("ハイフン位置が違う・長さが違う文字列は拒否する", () => {
+    // 旧チェック /^[0-9a-f-]{36}$/ はハイフンの位置を見ておらず、
+    // 例えば全部ハイフンの文字列（長さ36）も通ってしまっていた
+    expect(UUID_RE.test("-".repeat(36))).toBe(false);
+    expect(UUID_RE.test("a1b2c3d4-e5f6-4789-a123-b4c5d6e7f89")).toBe(false); // 1文字短い
+    expect(UUID_RE.test("")).toBe(false);
   });
 });

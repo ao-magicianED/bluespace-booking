@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/supabase";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { isReviewEligible, normalizeReviewInput } from "@/lib/reviews";
+import { isReviewEligible, normalizeReviewInput, UUID_RE } from "@/lib/reviews";
 import { sendAdminAlert } from "@/lib/mail";
 import type { Booking } from "@/lib/types";
 
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   const token = body.token ?? "";
-  if (!/^[0-9a-f-]{36}$/.test(token)) {
+  if (!UUID_RE.test(token)) {
     return NextResponse.json({ error: "URLが不正です" }, { status: 400 });
   }
 

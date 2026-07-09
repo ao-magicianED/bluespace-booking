@@ -3,12 +3,18 @@
 -- コンバージョンの中核。本サイトは静的な「ご利用者の声」のみだったため、
 -- 「利用完了 → レビュー依頼メール → トークンURLから投稿 → 管理者承認 → 公開」の流れを追加する。
 
--- レビュー依頼用トークン（予約IDとは別の秘密URL。メール受信者だけが投稿できる）
-alter table bookings add column if not exists review_token uuid not null default gen_random_uuid();
--- レビュー依頼メールの送信済みフラグ（冪等化用。reminder_email_sent_at と同じ考え方）
+-- レビュー依頼用トークン（予約IDとは別の秘密URL。メール受信者だけが投稿できる）。
+-- gen_random_uuid()はvolatile（行ごとに異なる値）なため、NOT NULL DEFAULT付きで一発追加すると
+-- 既存の全行を書き換えるフルテーブルリライトになる。bookingsが大きくなっても安全なよう
+-- 「nullableで追加→バックフィル→ユニーク制約→新規行用のdefault→NOT NULL化」の順で行う
+alter table bookings add column if not exists review_token uuid;
+update bookings set review_token = gen_random_uuid() where review_token is null;
 alter table bookings add column if not exists review_request_sent_at timestamptz;
 
 create unique index if not exists idx_bookings_review_token on bookings(review_token);
+
+alter table bookings alter column review_token set default gen_random_uuid();
+alter table bookings alter column review_token set not null;
 
 create table if not exists booking_reviews (
   id uuid default gen_random_uuid() primary key,

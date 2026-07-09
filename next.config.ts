@@ -13,6 +13,16 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        // /review/[token] のURLはトークン自体が認証情報（bearer token）。
+        // ページ内リンク遷移時にReferer経由でトークンが外部/ログへ漏れないようにする
+        source: "/review/:path*",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -67,6 +67,23 @@ export function isReviewEligible(
   return { ok: true };
 }
 
+/** UUID形式の厳密チェック（DB側のcastエラー誘発を防ぐ） */
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * 制御文字（改行・タブ以外のC0/DEL）とBidi制御文字（RLO/LRO等）を除去する（表示崩し対策）。
+ * \uXXXX エスケープで組み立てる（ソース中に生の制御文字を埋め込まない）。
+ */
+const CONTROL_CHARS_RE = new RegExp(
+  "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F" +
+    "\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]",
+  "g"
+);
+
+function stripControlChars(s: string): string {
+  return s.replace(CONTROL_CHARS_RE, "");
+}
+
 /** 投稿内容の検証・正規化（純粋関数。API側で使用） */
 export function normalizeReviewInput(input: {
   rating?: unknown;
@@ -80,9 +97,10 @@ export function normalizeReviewInput(input: {
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     return { ok: false, error: "評価は1〜5の星で選択してください" };
   }
-  const comment = String(input.comment ?? "").trim().slice(0, REVIEW_COMMENT_MAX);
-  const purpose = String(input.purpose ?? "").trim().slice(0, REVIEW_PURPOSE_MAX);
-  const reviewerName = String(input.reviewerName ?? "").trim().slice(0, REVIEW_NAME_MAX);
+  const clean = (v: unknown, max: number) =>
+    stripControlChars(String(v ?? "")).trim().slice(0, max);
+  const comment = clean(input.comment, REVIEW_COMMENT_MAX);
+  const purpose = clean(input.purpose, REVIEW_PURPOSE_MAX);
+  const reviewerName = clean(input.reviewerName, REVIEW_NAME_MAX);
   return { ok: true, rating, comment, purpose, reviewerName };
 }
-
