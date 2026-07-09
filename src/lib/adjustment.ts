@@ -57,6 +57,25 @@ export async function collectPaymentIntents(
     }
   }
 
+  // セルフ延長のPI（booking_change_requestsから取得）。
+  // PIが記録されている＝延長分の決済が完了している（approvedのほか、
+  // 決済完了後に反映処理だけ失敗した pending_payment も含める）
+  const { data: changeRequests } = await db
+    .from("booking_change_requests")
+    .select("stripe_payment_intent_id")
+    .eq("booking_id", bookingId)
+    .not("stripe_payment_intent_id", "is", null)
+    .order("created_at", { ascending: true });
+
+  for (const cr of changeRequests ?? []) {
+    if (cr.stripe_payment_intent_id && !pis.some((p) => p.piId === cr.stripe_payment_intent_id)) {
+      pis.push({
+        piId: cr.stripe_payment_intent_id,
+        maxRefundable: Infinity,
+      });
+    }
+  }
+
   return pis;
 }
 

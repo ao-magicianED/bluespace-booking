@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/auth-server";
 import { getDb } from "@/lib/supabase";
 import { calcRefund } from "@/lib/cancellation";
 import { executeCancellation } from "@/lib/cancel-booking";
+import { effectiveTotal } from "@/lib/adjustment";
 import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +41,9 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: venue } = await db.from("venues").select("*").eq("id", booking.venue_id).single<Venue>();
+  // 返金基準は延長・追加請求・短縮を反映した実効金額（管理者キャンセルと同一基準）
   const refund = calcRefund(
-    booking.total_amount,
+    effectiveTotal(booking),
     new Date(booking.start_at),
     new Date(),
     venue?.cancellation_policy ?? null

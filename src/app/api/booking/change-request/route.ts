@@ -147,58 +147,87 @@ export async function POST(req: NextRequest) {
     const oldPeriod = formatBookingPeriod(booking);
     const newPeriod = formatBookingPeriod({ start_at: start.toISOString(), end_at: end.toISOString() });
 
-    const session = await stripe.checkout.sessions.create(
-      {
-        mode: "payment",
-        currency: "jpy",
-        line_items: [
-          {
-            price_data: {
-              currency: "jpy",
-              unit_amount: amounts.extraAmount,
-              product_data: {
-                name: `予約延長 ${venue.name}`,
-                description: `${oldPeriod} → ${newPeriod}`,
+    let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>> | null = null;
+    try {
+      session = await stripe.checkout.sessions.create(
+        {
+          mode: "payment",
+          currency: "jpy",
+          line_items: [
+            {
+              price_data: {
+                currency: "jpy",
+                unit_amount: amounts.extraAmount,
+                product_data: {
+                  name: `予約延長 ${venue.name}`,
+                  description: `${oldPeriod} → ${newPeriod}`,
+                },
               },
+              quantity: 1,
             },
-            quantity: 1,
+          ],
+          metadata: {
+            change_request_id: changeRequestId,
+            booking_id: bookingId,
           },
-        ],
-        metadata: {
-          change_request_id: changeRequestId,
-          booking_id: bookingId,
+          customer_email: booking.customer_email,
+          success_url: `${baseUrl}/my/${bookingId}?changed=1`,
+          cancel_url: `${baseUrl}/my/${bookingId}`,
+          expires_at: Math.floor(Date.now() / 1000) + EXTEND_CHECKOUT_EXPIRY_SECONDS,
         },
-        customer_email: booking.customer_email,
-        success_url: `${baseUrl}/my/${bookingId}?changed=1`,
-        cancel_url: `${baseUrl}/my/${bookingId}`,
-        expires_at: Math.floor(Date.now() / 1000) + EXTEND_CHECKOUT_EXPIRY_SECONDS,
-      },
-      { idempotencyKey: `cr-ext-${changeRequestId}` }
-    );
+        { idempotencyKey: `cr-ext-${changeRequestId}` }
+      );
 
-    await db
-      .from("booking_change_requests")
-      .update({ stripe_session_id: session.id })
-      .eq("id", changeRequestId);
+      // セッションIDの保存に失敗するとWebhook側の照合が必ず失敗する（支払済みなのに未反映）ため、
+      // 失敗時はcatch側でセッションを失効させて申請も取り下げる
+      const { error: saveErr } = await db
+        .from("booking_change_requests")
+        .update({ stripe_session_id: session.id })
+        .eq("id", changeRequestId);
+      if (saveErr) {
+        throw new Error(`セッションID保存エラー: ${saveErr.message}`);
+      }
 
-    await sendAdminAlert(
-      `予約延長申請（決済待ち）${venue.name}`,
-      [
-        `お客様: ${booking.customer_name} <${booking.customer_email}>`,
-        `変更前: ${oldPeriod}`,
-        `変更後: ${newPeriod}`,
-        `追加料金: ¥${amounts.extraAmount.toLocaleString()}`,
-        `理由: ${reason || "(なし)"}`,
-      ].join("\n")
-    );
+      await sendAdminAlert(
+        `予約延長申請（決済待ち）${venue.name}`,
+        [
+          `お客様: ${booking.customer_name} <${booking.customer_email}>`,
+          `変更前: ${oldPeriod}`,
+          `変更後: ${newPeriod}`,
+          `追加料金: ¥${amounts.extraAmount.toLocaleString()}`,
+          `理由: ${reason || "(なし)"}`,
+        ].join("\n")
+      );
 
-    return NextResponse.json({
-      ok: true,
-      type: "extend_pending_payment",
-      checkoutUrl: session.url,
-      extraAmount: amounts.extraAmount,
-      changeRequestId,
-    });
+      return NextResponse.json({
+        ok: true,
+        type: "extend_pending_payment",
+        checkoutUrl: session.url,
+        extraAmount: amounts.extraAmount,
+        changeRequestId,
+      });
+    } catch (e) {
+      // 失敗したら申請を失効させ、再申請できる状態に戻す
+      //（残したままだと重複申請禁止ルールでCron掃除まで72時間ロックされる）
+      console.error("[change-request] 延長Checkout処理失敗:", e);
+      // セッション作成後に失敗した場合は、支払われてしまう前にセッション自体も失効させる
+      if (session) {
+        try {
+          await stripe.checkout.sessions.expire(session.id);
+        } catch (expireErr) {
+          console.error("[change-request] セッション失効失敗:", expireErr);
+        }
+      }
+      await db
+        .from("booking_change_requests")
+        .update({ status: "expired", decided_at: new Date().toISOString() })
+        .eq("id", changeRequestId)
+        .eq("status", "pending_payment");
+      return NextResponse.json(
+        { error: "決済ページの作成に失敗しました。時間をおいてお試しください" },
+        { status: 500 }
+      );
+    }
   }
 
   // 短縮/時間ずらし: pending → 管理者承認待ち

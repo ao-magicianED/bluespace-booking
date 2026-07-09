@@ -84,6 +84,27 @@ export async function POST(req: NextRequest) {
   if (delta < 0) {
     // --- 減額: 差額を返金 ---
     const refundAmount = Math.abs(delta);
+
+    // 二重送信（ダブルクリック・リトライ）対策: Stripe返金を実行する前に、
+    // adjusted_totalへのCAS（compare-and-swap）更新で排他的にこの操作の実行権を取る。
+    // 同時に届いたリクエストは片方だけがこの更新に成功し、負けた側は409で弾かれる。
+    let claimQuery = db
+      .from("bookings")
+      .update({ adjusted_total: newAmount, updated_at: new Date().toISOString() })
+      .eq("id", bookingId)
+      .eq("booking_status", "confirmed");
+    claimQuery =
+      booking.adjusted_total == null
+        ? claimQuery.is("adjusted_total", null)
+        : claimQuery.eq("adjusted_total", booking.adjusted_total);
+    const { data: claimed, error: claimErr } = await claimQuery.select("id");
+    if (claimErr || !claimed || claimed.length === 0) {
+      return NextResponse.json(
+        { error: "この予約は他の操作と競合しています。画面を更新して再度お試しください" },
+        { status: 409 }
+      );
+    }
+
     const pis = await collectPaymentIntents(
       bookingId,
       booking.stripe_payment_intent_id,
@@ -92,24 +113,41 @@ export async function POST(req: NextRequest) {
     );
 
     if (pis.length === 0) {
+      // claim解除（返金元がないので今回は何も変更しなかったことにする）
+      await db
+        .from("bookings")
+        .update({ adjusted_total: booking.adjusted_total ?? null, updated_at: new Date().toISOString() })
+        .eq("id", bookingId);
       return NextResponse.json(
         { error: "返金元のStripe決済情報が見つかりません。手動でStripeダッシュボードから返金してください。" },
         { status: 422 }
       );
     }
 
-    const { refundIds, remainingAmount } = await refundFromPaymentIntents(
-      pis,
-      refundAmount,
-      `adj-dec-${bookingId}-${Date.now()}`
-    );
+    let refundIds: string[];
+    let remainingAmount: number;
+    try {
+      const r = await refundFromPaymentIntents(pis, refundAmount, `adj-dec-${bookingId}-${currentEffective}-${newAmount}`);
+      refundIds = r.refundIds;
+      remainingAmount = r.remainingAmount;
+    } catch (e) {
+      // Stripe側の返金に失敗した場合はclaimを解除し、手動対応をアラート
+      await db
+        .from("bookings")
+        .update({ adjusted_total: booking.adjusted_total ?? null, updated_at: new Date().toISOString() })
+        .eq("id", bookingId);
+      await sendAdminAlert(
+        "🚨 料金減額の返金失敗（手動対応必要）",
+        `予約ID: ${bookingId}\n返金予定額: ¥${refundAmount.toLocaleString()}\nエラー: ${String(e)}`
+      );
+      return NextResponse.json({ error: "返金処理に失敗しました。管理者に連絡してください" }, { status: 500 });
+    }
 
-    // DB更新
+    // DB更新（adjusted_totalは既にclaim済みなので、返金結果を反映するだけでよい）
     const newRefunded = (booking.refunded_amount ?? 0) + (refundAmount - remainingAmount);
     await db
       .from("bookings")
       .update({
-        adjusted_total: newAmount,
         refunded_amount: newRefunded,
         payment_status: newRefunded >= booking.total_amount ? "refunded" : "partially_refunded",
         updated_at: new Date().toISOString(),
@@ -215,11 +253,24 @@ export async function POST(req: NextRequest) {
       { idempotencyKey: `adj-inc-${adjustmentId}` }
     );
 
-    // セッションIDを保存
-    await db
+    // セッションIDを保存。失敗するとWebhook側のセッションID照合が必ず失敗する
+    //（支払済みなのに反映されない）ため、失敗時はセッションを失効させ調整も取り下げる
+    const { error: saveErr } = await db
       .from("booking_adjustments")
       .update({ stripe_session_id: session.id })
       .eq("id", adjustmentId);
+    if (saveErr) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch (e) {
+        console.error("[adjust-price] セッション失効失敗:", e);
+      }
+      await db.from("booking_adjustments").update({ status: "expired" }).eq("id", adjustmentId);
+      return NextResponse.json(
+        { error: "決済ページの作成に失敗しました。時間をおいてお試しください" },
+        { status: 500 }
+      );
+    }
 
     // お客様にメールでリンク送信
     await sendMail({

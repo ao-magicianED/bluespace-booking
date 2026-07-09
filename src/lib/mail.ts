@@ -36,19 +36,27 @@ export async function sendMail({ to, subject, text }: MailInput): Promise<boolea
   const body = new TextEncoder().encode(
     JSON.stringify({ from, to: [to], subject, text, reply_to: [replyTo] })
   );
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body,
-  });
-  if (!res.ok) {
-    console.error(`[mail] 送信失敗 (${res.status}): ${await res.text()}`);
+  // sendMailは「失敗してもthrowせずfalseを返す」契約で呼び出し元に使われる
+  // （confirm.ts等がこれに依存し、メール失敗でWebhook処理全体を落とさないようにしている）ため、
+  // ネットワーク障害時のfetch例外もここで吸収する
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    if (!res.ok) {
+      console.error(`[mail] 送信失敗 (${res.status}): ${await res.text()}`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`[mail] 送信エラー（ネットワーク障害等）: ${subject} -> ${to}`, e);
     return false;
   }
-  return true;
 }
 
 /** Discordチャンネルへ通知（DISCORD_WEBHOOK_URL未設定ならスキップ）。送信成功でtrue */
