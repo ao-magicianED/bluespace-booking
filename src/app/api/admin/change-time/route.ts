@@ -161,7 +161,9 @@ export async function POST(req: NextRequest) {
     );
 
     // 状態: pending_payment に戻して、Checkout完了Webhookで approved → 反映
-    await db
+    // ここの更新に失敗すると、CRが"approved"のまま（=顧客側の重複申請チェックをすり抜ける状態）
+    // かつ決済リンクだけが生きて残ってしまうため、失敗時はセッションを失効させCRも失効させる
+    const { error: crUpdateErr } = await db
       .from("booking_change_requests")
       .update({
         status: "pending_payment",
@@ -169,6 +171,21 @@ export async function POST(req: NextRequest) {
         decided_at: null,
       })
       .eq("id", (cr as { id: string }).id);
+    if (crUpdateErr) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch (e) {
+        console.error("[admin/change-time] セッション失効失敗:", e);
+      }
+      await db
+        .from("booking_change_requests")
+        .update({ status: "expired", decided_at: new Date().toISOString() })
+        .eq("id", (cr as { id: string }).id);
+      return NextResponse.json(
+        { error: "変更申請の更新に失敗しました。時間をおいてお試しください" },
+        { status: 500 }
+      );
+    }
 
     // お客様にメール送付
     await sendMail({

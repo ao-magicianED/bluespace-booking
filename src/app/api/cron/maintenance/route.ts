@@ -5,6 +5,7 @@ import { refreshHolidays } from "@/lib/holidays";
 import { runCouponCampaigns } from "@/lib/campaigns";
 import { voidInvoice } from "@/lib/invoice";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
+import { getStripe } from "@/lib/stripe";
 import { mapSearchUrl, myBookingUrl } from "@/lib/site-url";
 import { SELF_CHANGE_CUTOFF_HOURS } from "@/lib/change-request";
 import { utcToJstDateStr } from "@/lib/slots";
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
     holidays: 0,
     invoicesVoided: 0,
     changeRequestsExpired: 0,
+    priceAdjustmentsExpired: 0,
     remindersSent: 0,
     coupons: { thanks: 0, secondVisit: 0, winback30: 0, winback90: 0 },
   };
@@ -47,6 +49,36 @@ export async function GET(req: NextRequest) {
     .lt("created_at", expiryCutoff)
     .select("id");
   result.changeRequestsExpired = (expiredCrs ?? []).length;
+
+  // -1b. 古い追加請求（price_increase, pending_payment 72h以上）を期限切れに。
+  // Stripeのcheckout.session.expired Webhookを取りこぼすと、対応するbooking_adjustments行が
+  // pending_paymentのまま残り続け、その予約への以降の料金調整が全てブロックされてしまう保険措置
+  const { data: stalePriceAdjustments } = await db
+    .from("booking_adjustments")
+    .select("id, booking_id, stripe_session_id, new_amount")
+    .eq("adjustment_type", "price_increase")
+    .eq("status", "pending_payment")
+    .lt("created_at", expiryCutoff);
+  for (const adj of (stalePriceAdjustments ?? []) as {
+    id: string;
+    booking_id: string;
+    stripe_session_id: string | null;
+    new_amount: number;
+  }[]) {
+    if (adj.stripe_session_id) {
+      try {
+        await getStripe().checkout.sessions.expire(adj.stripe_session_id);
+      } catch (e) {
+        console.error("[cron] 追加請求Checkoutセッション失効失敗:", e);
+      }
+    }
+    await db.from("booking_adjustments").update({ status: "expired" }).eq("id", adj.id);
+    await sendAdminAlert(
+      "⏰ 追加請求の決済期限切れ（自動失効）",
+      `72時間以内にお支払いがなかったため、追加請求を自動的に失効させました。\n予約ID: ${adj.booking_id}\n調整ID: ${adj.id}\n請求額: ¥${adj.new_amount.toLocaleString()}\n必要であれば管理画面から再度料金調整を行ってください。`
+    );
+  }
+  result.priceAdjustmentsExpired = (stalePriceAdjustments ?? []).length;
 
   // 0-a. 期限切れの請求書払い予約: 請求書を無効化してお客様に通知してから失効させる
   //（カードのpendingと違い、明示的な後始末が必要）

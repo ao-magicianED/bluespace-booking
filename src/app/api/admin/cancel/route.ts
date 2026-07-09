@@ -64,17 +64,6 @@ export async function POST(req: NextRequest) {
     feeAmount = customFee;
     refundAmount = effective - feeAmount;
     tierLabel = "管理者判断・カスタム";
-
-    // 監査ログとして booking_adjustments に記録
-    await db.from("booking_adjustments").insert({
-      booking_id: bookingId,
-      adjustment_type: "cancel_fee_override",
-      previous_amount: effective,
-      new_amount: 0,
-      amount_delta: -effective,
-      reason: `キャンセル料 ¥${feeAmount.toLocaleString()} / 返金 ¥${refundAmount.toLocaleString()}`,
-      status: "completed",
-    });
   } else {
     const r = calcRefund(
       effective,
@@ -104,5 +93,20 @@ export async function POST(req: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 409 });
   }
+
+  // 監査ログ（カスタムキャンセル料の場合のみ）。キャンセル成功後に記録することで、
+  // 競合等でキャンセル自体が失敗したとき（409）に虚偽の「返金完了」記録が残らないようにする
+  if (mode === "custom") {
+    await db.from("booking_adjustments").insert({
+      booking_id: bookingId,
+      adjustment_type: "cancel_fee_override",
+      previous_amount: effective,
+      new_amount: 0,
+      amount_delta: -effective,
+      reason: `キャンセル料 ¥${feeAmount.toLocaleString()} / 返金 ¥${refundAmount.toLocaleString()}`,
+      status: "completed",
+    });
+  }
+
   return NextResponse.json({ ok: true, refundAmount });
 }
