@@ -8,6 +8,7 @@ import { effectiveTotal } from "@/lib/adjustment";
 import CancelBookingButton from "@/components/CancelBookingButton";
 import ChangeTimeForm from "@/components/ChangeTimeForm";
 import { canSelfChange } from "@/lib/change-request";
+import { isReviewEligible } from "@/lib/reviews";
 import type { Booking, BookingAdjustment, BookingChangeRequest, Venue } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
 
@@ -74,6 +75,13 @@ export default async function BookingDetailPage({
   const selfChangeOk = canSelfChange(booking, now);
   const bdRule = (booking.price_breakdown ?? {}) as { pricePerHour?: number };
   const pricePerHour = typeof bdRule.pricePerHour === "number" ? bdRule.pricePerHour : venue?.hourly_price ?? 0;
+
+  // レビュー導線（利用終了後30日以内・未投稿の予約にだけ表示）
+  const reviewEligible = isReviewEligible(booking, now);
+  const { data: existingReview } = reviewEligible.ok
+    ? await db.from("booking_reviews").select("id").eq("booking_id", booking.id).maybeSingle()
+    : { data: null };
+  const showReviewCta = reviewEligible.ok && !existingReview;
 
   return (
     <>
@@ -183,6 +191,14 @@ export default async function BookingDetailPage({
           <p style={{ marginTop: "1rem" }}>
             <Link href={`/my/${booking.id}/receipt`} className="receipt-link">
               🧾 領収書を発行する
+            </Link>
+          </p>
+        )}
+
+        {showReviewCta && (
+          <p style={{ marginTop: "0.5rem" }}>
+            <Link href={`/review/${booking.review_token}`} className="receipt-link">
+              ⭐ このスペースのレビューを書く（1分で完了）
             </Link>
           </p>
         )}

@@ -6,7 +6,7 @@ import { runCouponCampaigns } from "@/lib/campaigns";
 import { voidInvoice } from "@/lib/invoice";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
 import { getStripe } from "@/lib/stripe";
-import { mapSearchUrl, myBookingUrl } from "@/lib/site-url";
+import { mapSearchUrl, myBookingUrl, reviewUrl } from "@/lib/site-url";
 import { SELF_CHANGE_CUTOFF_HOURS } from "@/lib/change-request";
 import { utcToJstDateStr } from "@/lib/slots";
 import type { Booking, Venue } from "@/lib/types";
@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     changeRequestsExpired: 0,
     priceAdjustmentsExpired: 0,
     remindersSent: 0,
+    reviewRequestsSent: 0,
     coupons: { thanks: 0, secondVisit: 0, winback30: 0, winback90: 0 },
   };
 
@@ -223,6 +224,57 @@ export async function GET(req: NextRequest) {
     }
   } catch (e) {
     console.error("[cron] リマインダー送信エラー:", e);
+  }
+
+  // 2-c. レビュー依頼メール（利用終了した確定予約に1回だけ送る・冪等）
+  // 直近3日以内に終了した予約が対象（cron停止からの復旧時に古い予約へ大量送信しないための下限）
+  try {
+    const lookbackIso = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: ended } = await db
+      .from("bookings")
+      .select("*")
+      .eq("booking_status", "confirmed")
+      .is("review_request_sent_at", null)
+      .lt("end_at", new Date().toISOString())
+      .gt("end_at", lookbackIso)
+      .limit(200);
+    for (const b of (ended ?? []) as Booking[]) {
+      const { data: venue } = await db
+        .from("venues")
+        .select("name")
+        .eq("id", b.venue_id)
+        .maybeSingle<{ name: string }>();
+      if (!venue) continue;
+      const ok = await sendMail({
+        to: b.customer_email,
+        subject: `【1分で完了】${venue.name} のご利用はいかがでしたか？`,
+        text: [
+          `${b.customer_name} 様`,
+          ``,
+          `先日は ${venue.name} をご利用いただき、誠にありがとうございました。`,
+          ``,
+          `よろしければ、ご利用の感想をお聞かせください（星を選ぶだけでも大歓迎です）。`,
+          `いただいたレビューは拠点ページに掲載され、これからご利用を検討される方の参考になります。`,
+          ``,
+          `▼レビューを投稿する（1分で完了）`,
+          reviewUrl(b.review_token),
+          ``,
+          `※このリンクは ${b.customer_name} 様のご予約専用です。`,
+          ``,
+          `またのご利用をお待ちしております。`,
+          `ブルーステージ合同会社`,
+        ].join("\n"),
+      });
+      if (ok) {
+        await db
+          .from("bookings")
+          .update({ review_request_sent_at: new Date().toISOString() })
+          .eq("id", b.id);
+        result.reviewRequestsSent++;
+      }
+    }
+  } catch (e) {
+    console.error("[cron] レビュー依頼送信エラー:", e);
   }
 
   // 3. 自動クーポン配布（初回サンクス・30日/90日掘り起こし。冪等）
