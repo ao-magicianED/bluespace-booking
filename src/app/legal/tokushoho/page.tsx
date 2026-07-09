@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 
@@ -8,10 +9,6 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE}/legal/tokushoho` },
 };
 
-/**
- * 特定商取引法に基づく表記（ひな形）
- * ★公開前に必ず正式な会社情報に置き換えて、内容を確認すること★
- */
 export default function TokushohoPage() {
   return (
     <>
@@ -24,17 +21,18 @@ export default function TokushohoPage() {
           </tr>
           <tr>
             <th>運営責任者</th>
-            <td>{/* ★代表者名を記載 */}（公開前に記載）</td>
+            <td>菅野雄策</td>
           </tr>
           <tr>
             <th>所在地</th>
-            <td>{/* ★登記住所を記載 */}（公開前に記載）</td>
+            <td>東京都千代田区鍛冶町２丁目８−７ 光起ビル B1F</td>
           </tr>
           <tr>
             <th>連絡先</th>
             <td>
-              メール: bluespace@bluestage-lcc.com
-              {/* ★電話番号を記載（請求があった場合に遅滞なく開示する旨でも可） */}
+              <Link href="/contact">お問い合わせフォーム</Link>よりご連絡ください。
+              <br />
+              電話番号: ご請求をいただいた場合には遅滞なく開示いたします。
             </td>
           </tr>
           <tr>
@@ -60,11 +58,7 @@ export default function TokushohoPage() {
           <tr>
             <th>キャンセル・返金</th>
             <td>
-              利用日の8日以上前: 全額返金
-              <br />
-              利用日の7〜2日前: 50%返金（キャンセル料50%）
-              <br />
-              利用日の前日・当日: 返金不可
+              スペース・ご予約内容により異なります。予約完了画面および確認メールに記載の内容をご確認ください。
               <br />
               キャンセルは会員マイページから手続きできます。
             </td>
