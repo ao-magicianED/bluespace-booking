@@ -68,8 +68,11 @@ export async function applyApprovedTimeChange(params: {
         refundId = r.refundIds[0] ?? null;
         refundRemaining = r.remainingAmount;
         actuallyRefunded = amounts.refundAmount - refundRemaining;
-        updates.refunded_amount = (booking.refunded_amount ?? 0) + actuallyRefunded;
-        updates.payment_status = paymentStatusAfterRefund(booking, actuallyRefunded);
+        // 1円も返金できていない場合はステータスを動かさない（返金失敗として手動対応アラートに任せる）
+        if (actuallyRefunded > 0) {
+          updates.refunded_amount = (booking.refunded_amount ?? 0) + actuallyRefunded;
+          updates.payment_status = paymentStatusAfterRefund(booking, actuallyRefunded);
+        }
       } catch (e) {
         await sendAdminAlert(
           "🚨 時間変更の自動返金失敗（手動対応必要）",
