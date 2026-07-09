@@ -32,6 +32,7 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 │   ├── phase2-design.md        ← フェーズ2設計＋決定事項ログ
 │   ├── license-upgrade-feature-design.md ← 外販ライセンス機能の設計書
 │   ├── stripe-production-switch-guide.md ← Stripe本番モード切替の手順書
+│   ├── phase3-design.md        ← フェーズ3設計＝競合3社ギャップ分析＋レビュー機能設計＋今後のロードマップ
 │   ├── two-site-strategy.md    ← コーポレート×予約サイトのSEO戦略（Codexレビュー済み）
 │   ├── setup-guide.md          ← 外部サービスの初期設定手順
 │   ├── competitor-research.md  ← 競合4社の予約UX調査
@@ -69,6 +70,7 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 | `ledger.ts` | 会計帳簿（会員番号 BS-00001 形式・**実収額 realizedRevenue()**） |
 | `occupancy.ts` / `occupancy-report.ts` | 稼働率計算（純粋ロジック）と日次レポート生成 |
 | `campaigns.ts` | 自動クーポン配布（初回/2回目サンクス・30日/90日掘り起こし） |
+| `reviews.ts` / `reviews-db.ts` | 実利用者レビュー（純粋ロジック/DB取得。純粋側はクライアントからもimportされるためDB禁止） |
 | `license.ts` | 外販ライセンス管理（プラン定義・拠点数上限） |
 | `invoice.ts` | 請求書払い（Stripe Invoicing＋銀行振込） |
 | `mail.ts` | Resendメール＋Discord通知 |
@@ -119,9 +121,15 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 - **自動クーポン配布**（Cronから毎日・冪等）: 初回利用翌日10%OFF／2回目利用翌日10%OFF／最終利用30日後・90日後の掘り起こし10%OFF。本人メール専用（restrict_email）で横流し不可
 - **管理者による個別クーポン付与**（/admin/coupons）
 
+### 実利用者レビュー（フェーズ3・2026-07-10実装 ⚠️0016未適用＝§9の1参照）
+- 利用終了翌日にレビュー依頼メール自動送信（cron・冪等）→ `/review/[token]` から星1〜5＋コメント＋用途を投稿（実予約者のみ・1予約1レビュー）→ **管理者が /admin/reviews で承認して公開**（運営返信も可）
+- 拠点ページに平均★・件数・レビュー一覧を表示。実レビューが1件以上あれば静的「ご利用者の声」から自動切替＋検索結果に星が出るAggregateRating構造化データを出力
+- 会員はマイページ予約詳細からも投稿可。設計詳細は docs/phase3-design.md §4
+
 ### 管理画面 `/admin`
 - 統計トップ・**分析ページ**（月別グラフ・会員予約回数）・**稼働率分析**（/admin/occupancy）
 - 予約一覧/検索・予約詳細（キャンセル返金ワンクリック（規定/全額）・時間変更・料金調整・変更申請の承認/却下）
+- **レビュー管理**（/admin/reviews・承認/非公開/運営返信。承認待ち件数はダッシュボードヘッダーに表示）
 - **会計帳簿**（/admin/ledger・実収額ベース・**CSV出力**あり）
 - **拠点管理UI**（/admin/venues・FAQ上書き・写真ギャラリー管理（Supabase Storage）・入退室案内の編集）
 - クーポン管理・ライセンス状況（/admin/license）・カレンダー再同期
@@ -142,13 +150,14 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 
 | パス | スケジュール | 内容 |
 |---|---|---|
-| `/api/cron/maintenance` | 毎日 UTC18時＝**JST 3時** | 請求書期限切れvoid→自動キャンセル・祝日更新・期限切れpending掃除・カレンダー同期/確認メール再試行・**前日リマインダー送信**・**自動クーポン配布**・変更申請/追加請求の期限切れ処理 |
+| `/api/cron/maintenance` | 毎日 UTC18時＝**JST 3時** | 請求書期限切れvoid→自動キャンセル・祝日更新・期限切れpending掃除・カレンダー同期/確認メール再試行・**前日リマインダー送信**・**レビュー依頼メール送信**・**自動クーポン配布**・変更申請/追加請求の期限切れ処理 |
 | `/api/cron/daily-report` | 毎日 UTC22時＝**JST 朝7時** | 稼働率日次レポート（低稼働アラート判定つき）をメール＋Discordへ |
 
 ## 5. DBマイグレーション（supabase/migrations・本番適用済み）
 
-**0001〜0015の16ファイル**。⚠️ **0004は2本ある**（`0004_cancellation.sql` と `0004_invoice.sql`。
+**0001〜0016の17ファイル**。⚠️ **0004は2本ある**（`0004_cancellation.sql` と `0004_invoice.sql`。
 番号が重複しているが両方適用済み。新規migrationは必ず既存の最大番号+1を確認してから振ること）。
+⚠️ **0016のみ本番未適用**（§9の1参照。追加のみ・既存データ無変更なので稼働中でも安全に適用できる）。
 
 | # | 内容 |
 |---|---|
@@ -168,6 +177,7 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 | 0013 | 外販ライセンス制御（license_limits・license_changes・venues INSERTトリガー） |
 | 0014 | 前日リマインダーメールの送信済みフラグ |
 | 0015 | **extra_paid_amount 追加（実収額の二重控除バグ修正**・§9の6参照） |
+| 0016 | **実利用者レビュー**（booking_reviews・bookings.review_token/review_request_sent_at）⚠️本番未適用 |
 
 ### 料金設定（DB venuesテーブルが正。以下は2026-07-09にDBで確認した値・7拠点すべてactive）
 
@@ -220,6 +230,11 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 
 ## 9. 残タスク（優先順）
 
+0. **レビュー機能のリリース（フェーズ3・コードはこのブランチで完成済み）**:
+   ①Supabase SQL Editorで `supabase/migrations/0016_reviews.sql` を適用（追加のみ・安全）
+   ②`npx vercel deploy --prod --yes` ③動作確認は docs/phase3-design.md §5 の手順。
+   **必ず①→②の順**（コードを先に出しても壊れないが、メール送信等が動かない）。
+   以降の機能追加は docs/phase3-design.md §6 のロードマップ（パック料金・用途別ページ等）に従う
 1. **GBPウェブサイトURL統一（2026-06-12時点で残り5件）**: 白金高輪・西新宿403は完了済み。残り＝京成小岩/神田/上野御徒町/上野4A/上野4B。
    GBPグループ: https://business.google.com/groups/102124491183677146513/locations
    各拠点の鉛筆→連絡先→ウェブサイトに `https://bluespacerental.com/{slug}` を設定
@@ -232,7 +247,7 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 
 ## 10. テスト方法
 
-- ユニット: `npm test`（vitest **71件**: slots 23 / pricing 12 / cancellation 7 / occupancy 20 / ledger 9）
+- ユニット: `npm test`（vitest **83件**: slots 23 / pricing 12 / cancellation 7 / occupancy 20 / ledger 9 / reviews 12）
 - カード決済E2E: テストカード `4242 4242 4242 4242`
 - 請求書払いE2E: 法人予約→Stripeダッシュボードで請求書確認→`stripe.testHelpers.customers.fundCashBalance(customerId, {amount, currency:'jpy'})` で擬似入金→自動確定を確認
 - 予約変更（延長）E2E: マイページ→時間変更→延長を選択→差額Checkout（テストカード）→自動確定・カレンダー時刻更新を確認
