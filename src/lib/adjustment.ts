@@ -8,6 +8,23 @@ export function effectiveTotal(
 }
 
 /**
+ * 返金実行後の payment_status を決める。
+ * 「実際に支払われた総額（total_amount + extra_paid_amount）」を全額返金しきったときだけ
+ * "refunded"。total_amount や実効金額（adjusted_total）と比較すると、増額・延長で支払われた
+ * 分が手元に残っているのに refunded 扱いになり、realizedRevenue() が対象外（実収0円）として
+ * 集計してしまう。
+ * @param refundedNow 今回の返金で実際にStripeへ通った金額（booking.refunded_amount 加算前）
+ */
+export function paymentStatusAfterRefund(
+  b: Pick<Booking, "total_amount" | "extra_paid_amount" | "refunded_amount">,
+  refundedNow: number
+): "refunded" | "partially_refunded" {
+  const cumulativeRefunded = (b.refunded_amount ?? 0) + refundedNow;
+  const paidTotal = b.total_amount + (b.extra_paid_amount ?? 0);
+  return cumulativeRefunded >= paidTotal ? "refunded" : "partially_refunded";
+}
+
+/**
  * 予約に紐づく全てのStripe Payment Intent IDを返す（返金時に使う）。
  * メインPI → 追加請求のPI の順で返す。
  */

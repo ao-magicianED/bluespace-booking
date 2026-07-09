@@ -1,7 +1,12 @@
 import { getDb } from "./supabase";
 import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
-import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
+import {
+  effectiveTotal,
+  collectPaymentIntents,
+  refundFromPaymentIntents,
+  paymentStatusAfterRefund,
+} from "./adjustment";
 import { deleteBookingEvent } from "./google-calendar";
 import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
@@ -98,7 +103,7 @@ export async function executeCancellation(params: {
         await db
           .from("bookings")
           .update({
-            payment_status: actualRefunded >= effective ? "refunded" : "partially_refunded",
+            payment_status: paymentStatusAfterRefund(booking, actualRefunded),
             refunded_amount: (booking.refunded_amount ?? 0) + actualRefunded,
             updated_at: new Date().toISOString(),
           })

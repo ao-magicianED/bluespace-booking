@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { getStripe } from "@/lib/stripe";
-import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "@/lib/adjustment";
+import {
+  effectiveTotal,
+  collectPaymentIntents,
+  refundFromPaymentIntents,
+  paymentStatusAfterRefund,
+} from "@/lib/adjustment";
 import { sendMail, sendAdminAlert } from "@/lib/mail";
 import { formatBookingPeriod } from "@/lib/confirm";
 import type { Booking, Venue } from "@/lib/types";
@@ -149,7 +154,7 @@ export async function POST(req: NextRequest) {
       .from("bookings")
       .update({
         refunded_amount: newRefunded,
-        payment_status: newRefunded >= booking.total_amount ? "refunded" : "partially_refunded",
+        payment_status: paymentStatusAfterRefund(booking, refundAmount - remainingAmount),
         updated_at: new Date().toISOString(),
       })
       .eq("id", bookingId);

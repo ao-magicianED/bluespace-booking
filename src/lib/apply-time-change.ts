@@ -2,7 +2,12 @@ import { getDb } from "./supabase";
 import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
 import { updateBookingEventTime, type BookingEventDetails } from "./google-calendar";
-import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
+import {
+  effectiveTotal,
+  collectPaymentIntents,
+  refundFromPaymentIntents,
+  paymentStatusAfterRefund,
+} from "./adjustment";
 import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
 import type { PriceBreakdown } from "./pricing";
@@ -64,10 +69,7 @@ export async function applyApprovedTimeChange(params: {
         refundRemaining = r.remainingAmount;
         actuallyRefunded = amounts.refundAmount - refundRemaining;
         updates.refunded_amount = (booking.refunded_amount ?? 0) + actuallyRefunded;
-        updates.payment_status =
-          (booking.refunded_amount ?? 0) + actuallyRefunded >= booking.total_amount
-            ? "refunded"
-            : "partially_refunded";
+        updates.payment_status = paymentStatusAfterRefund(booking, actuallyRefunded);
       } catch (e) {
         await sendAdminAlert(
           "🚨 時間変更の自動返金失敗（手動対応必要）",
