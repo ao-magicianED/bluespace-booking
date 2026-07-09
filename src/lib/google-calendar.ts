@@ -68,14 +68,19 @@ export async function getBusyRanges(
   if (!calendarId) return [];
   const cal = getCalendarClient();
   const res = await withRetry(() =>
-    cal.freebusy.query({
-      requestBody: {
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        timeZone: "Asia/Tokyo",
-        items: [{ id: calendarId }],
+    cal.freebusy.query(
+      {
+        requestBody: {
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          timeZone: "Asia/Tokyo",
+          items: [{ id: calendarId }],
+        },
       },
-    })
+      // gaxiosにはデフォルトタイムアウトがなく、ソケットハング時はawaitが永久に続く。
+      // rejectに変換して呼び出し側のfail closed / 自社予約のみ集計フォールバックに到達させる
+      { timeout: 10_000 }
+    )
   );
   const calResult = res.data.calendars?.[calendarId];
   // カレンダー単位のエラー（権限不足など）もfail closed対象

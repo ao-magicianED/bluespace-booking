@@ -82,6 +82,8 @@ export default async function AdminPage({
         <span>
           <Link href="/admin/analytics" className="policy">📈 分析</Link>
           {"　"}
+          <Link href="/admin/occupancy" className="policy">📊 稼働率</Link>
+          {"　"}
           <Link href="/admin/ledger" className="policy">📒 予約台帳・CSV</Link>
           {"　"}
           <Link href="/admin/venues" className="policy">🏢 拠点情報の編集（写真・FAQ・入退室案内）</Link>
