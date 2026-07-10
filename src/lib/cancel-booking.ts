@@ -1,12 +1,7 @@
 import { getDb } from "./supabase";
 import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
-import {
-  effectiveTotal,
-  collectPaymentIntents,
-  refundFromPaymentIntents,
-  paymentStatusAfterRefund,
-} from "./adjustment";
+import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
 import { deleteBookingEvent } from "./google-calendar";
 import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
@@ -100,16 +95,21 @@ export async function executeCancellation(params: {
         );
         refundId = refundIds[0] ?? null;
         const actualRefunded = refundAmount - remainingAmount;
-        // 1円も返金できていない場合はステータスを動かさない（下の返金不足アラートで手動対応）
+        // refunded_amountの加算・payment_statusの再計算はDB側の単一UPDATEで原子的に行う
+        //（同時実行での加算漏れを防ぐ。supabase/migrations/0017参照）。
+        // 1円も返金できていない場合は何もしない（下の返金不足アラートで手動対応）
         if (actualRefunded > 0) {
-          await db
-            .from("bookings")
-            .update({
-              payment_status: paymentStatusAfterRefund(booking, actualRefunded),
-              refunded_amount: (booking.refunded_amount ?? 0) + actualRefunded,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", booking.id);
+          const { error: incErr } = await db.rpc("increment_refunded_amount", {
+            p_booking_id: booking.id,
+            p_delta: actualRefunded,
+          });
+          if (incErr) {
+            console.error("[cancel] refunded_amount加算失敗:", incErr);
+            await sendAdminAlert(
+              "🚨 返金額の記録に失敗（手動対応必要）",
+              `予約ID: ${booking.id}\nStripe側は返金済みですが、DBへの反映(refunded_amount)に失敗しました。手動で確認・修正してください。\nエラー: ${String(incErr.message ?? incErr)}`
+            );
+          }
         }
 
         if (remainingAmount > 0) {

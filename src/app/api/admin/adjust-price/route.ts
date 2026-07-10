@@ -2,12 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { getStripe } from "@/lib/stripe";
-import {
-  effectiveTotal,
-  collectPaymentIntents,
-  refundFromPaymentIntents,
-  paymentStatusAfterRefund,
-} from "@/lib/adjustment";
+import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "@/lib/adjustment";
 import { sendMail, sendAdminAlert } from "@/lib/mail";
 import { formatBookingPeriod } from "@/lib/confirm";
 import type { Booking, Venue } from "@/lib/types";
@@ -164,18 +159,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "返金処理に失敗しました。管理者に連絡してください" }, { status: 500 });
     }
 
-    // DB更新（adjusted_totalは既にclaim済みなので、返金結果を反映するだけでよい）。
-    // 1円も返金できていない場合はステータスを動かさない（下の管理者通知で手動対応）
+    // refunded_amountの加算・payment_statusの再計算はDB側の単一UPDATEで原子的に行う
+    //（adjusted_totalは既にCASでclaim済み。加算処理自体はsupabase/migrations/0017参照）。
+    // 1円も返金できていない場合は何もしない（下の管理者通知で手動対応）
     const actuallyRefunded = refundAmount - remainingAmount;
     if (actuallyRefunded > 0) {
-      await db
-        .from("bookings")
-        .update({
-          refunded_amount: (booking.refunded_amount ?? 0) + actuallyRefunded,
-          payment_status: paymentStatusAfterRefund(booking, actuallyRefunded),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", bookingId);
+      const { error: incErr } = await db.rpc("increment_refunded_amount", {
+        p_booking_id: bookingId,
+        p_delta: actuallyRefunded,
+      });
+      if (incErr) {
+        console.error("[adjust-price] refunded_amount加算失敗:", incErr);
+        await sendAdminAlert(
+          "🚨 返金額の記録に失敗（手動対応必要）",
+          `予約ID: ${bookingId}\nStripe側は返金済みですが、DBへの反映(refunded_amount)に失敗しました。手動で確認・修正してください。\nエラー: ${String(incErr.message ?? incErr)}`
+        );
+      }
     }
 
     await db.from("booking_adjustments").insert({

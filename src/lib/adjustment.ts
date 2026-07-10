@@ -13,6 +13,11 @@ export function effectiveTotal(
  * "refunded"。total_amount や実効金額（adjusted_total）と比較すると、増額・延長で支払われた
  * 分が手元に残っているのに refunded 扱いになり、realizedRevenue() が対象外（実収0円）として
  * 集計してしまう。
+ *
+ * 実際のDB書き込みは supabase/migrations/0017 の increment_refunded_amount() が
+ * 同じ判定式をSQL側で原子的に行う（JSでSELECT→加算→UPDATEするとlost updateが起きるため）。
+ * この関数自体はテスト・ドキュメント用に残しているので、判定ロジックを変える場合は
+ * 必ずSQL側の関数も合わせて直すこと。
  * @param refundedNow 今回の返金で実際にStripeへ通った金額（booking.refunded_amount 加算前）
  */
 export function paymentStatusAfterRefund(
