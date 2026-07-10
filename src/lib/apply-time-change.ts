@@ -2,12 +2,7 @@ import { getDb } from "./supabase";
 import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
 import { updateBookingEventTime, type BookingEventDetails } from "./google-calendar";
-import {
-  effectiveTotal,
-  collectPaymentIntents,
-  refundFromPaymentIntents,
-  paymentStatusAfterRefund,
-} from "./adjustment";
+import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
 import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
 import type { PriceBreakdown } from "./pricing";
@@ -43,9 +38,20 @@ export async function applyApprovedTimeChange(params: {
     updates.adjusted_total = amounts.newAmount;
   }
   // 増額分はここで初めて「実際に支払われた」ことが確定する（呼び出し元は決済完了後のみ
-  // extraAmount>0で呼ぶ。実収額の二重控除を避けるため adjusted_total とは別に積み上げる）
+  // extraAmount>0で呼ぶ）。extra_paid_amountの加算はDB側の単一UPDATEで完結させ、
+  // 同時実行での加算漏れ（lost update）を防ぐ（supabase/migrations/0017参照）
   if (amounts.extraAmount > 0) {
-    updates.extra_paid_amount = (booking.extra_paid_amount ?? 0) + amounts.extraAmount;
+    const { error: incErr } = await db.rpc("increment_extra_paid_amount", {
+      p_booking_id: bookingId,
+      p_delta: amounts.extraAmount,
+    });
+    if (incErr) {
+      console.error("[change-time] extra_paid_amount加算失敗:", incErr);
+      await sendAdminAlert(
+        "🚨 延長決済の反映に失敗（手動対応必要）",
+        `予約ID: ${bookingId}\n決済は完了していますが、extra_paid_amountの加算に失敗しました。手動で確認・修正してください。\nエラー: ${String(incErr.message ?? incErr)}`
+      );
+    }
   }
 
   let actuallyRefunded = 0;
@@ -68,10 +74,20 @@ export async function applyApprovedTimeChange(params: {
         refundId = r.refundIds[0] ?? null;
         refundRemaining = r.remainingAmount;
         actuallyRefunded = amounts.refundAmount - refundRemaining;
-        // 1円も返金できていない場合はステータスを動かさない（返金失敗として手動対応アラートに任せる）
+        // refunded_amountの加算・payment_statusの再計算もDB側の単一UPDATEで原子的に行う。
+        // 1円も返金できていない場合は何もしない（返金失敗として手動対応アラートに任せる）
         if (actuallyRefunded > 0) {
-          updates.refunded_amount = (booking.refunded_amount ?? 0) + actuallyRefunded;
-          updates.payment_status = paymentStatusAfterRefund(booking, actuallyRefunded);
+          const { error: incErr } = await db.rpc("increment_refunded_amount", {
+            p_booking_id: bookingId,
+            p_delta: actuallyRefunded,
+          });
+          if (incErr) {
+            console.error("[change-time] refunded_amount加算失敗:", incErr);
+            await sendAdminAlert(
+              "🚨 返金額の記録に失敗（手動対応必要）",
+              `予約ID: ${bookingId}\nStripe側は返金済みですが、DBへの反映(refunded_amount)に失敗しました。手動で確認・修正してください。\nエラー: ${String(incErr.message ?? incErr)}`
+            );
+          }
         }
       } catch (e) {
         await sendAdminAlert(

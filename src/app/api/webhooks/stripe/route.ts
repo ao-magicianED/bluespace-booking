@@ -623,7 +623,7 @@ async function handleAdjustmentCompleted(session: Stripe.Checkout.Session): Prom
   // 予約がキャンセルされていないか
   const { data: booking } = await db
     .from("bookings")
-    .select("booking_status, customer_name, customer_email, extra_paid_amount")
+    .select("booking_status, customer_name, customer_email")
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking) problems.push("予約が存在しない");
@@ -665,13 +665,23 @@ async function handleAdjustmentCompleted(session: Stripe.Checkout.Session): Prom
 
   if ((updated ?? []).length === 0) return; // 既に処理済み
 
-  // 予約のadjusted_totalを更新。extra_paid_amountも積み上げる
-  // （実収額の二重控除を避けるため adjusted_total とは別に「実際に払われた増額累計」を管理する）
+  // extra_paid_amountの加算はDB側の単一UPDATEで完結させる（同時実行での加算漏れを防ぐ。
+  // supabase/migrations/0017参照）。adjusted_totalは絶対値の上書きなので通常のupdateでよい
+  const { error: incErr } = await db.rpc("increment_extra_paid_amount", {
+    p_booking_id: bookingId,
+    p_delta: adj.amount_delta,
+  });
+  if (incErr) {
+    console.error("[webhook] extra_paid_amount加算失敗:", incErr);
+    await sendAdminAlert(
+      "🚨 追加請求の反映に失敗（手動対応必要）",
+      `予約ID: ${bookingId}\n決済は完了していますが、extra_paid_amountの加算に失敗しました。手動で確認・修正してください。\nエラー: ${String(incErr.message ?? incErr)}`
+    );
+  }
   await db
     .from("bookings")
     .update({
       adjusted_total: adj.new_amount,
-      extra_paid_amount: (booking.extra_paid_amount ?? 0) + adj.amount_delta,
       updated_at: new Date().toISOString(),
     })
     .eq("id", bookingId);
@@ -757,21 +767,34 @@ async function handleChangeRequestCompleted(session: Stripe.Checkout.Session): P
     return;
   }
 
-  // 原子的に pending_payment → approved（重複処理防止）
+  // 原子的に pending_payment → approved（重複処理防止）。
+  // statusを変えずにstripe_payment_intent_idだけ更新すると、Webhookの重複配信時に
+  // 両方とも同じ .eq("status","pending_payment") 条件を通過してしまい、
+  // applyApprovedTimeChange（金額の加算RPCを含む）が二重に呼ばれてしまう
   const paymentIntentId =
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
 
-  const { data: claimed } = await db
+  const { data: claimed, error: claimErr } = await db
     .from("booking_change_requests")
     .update({
+      status: "approved",
       stripe_payment_intent_id: paymentIntentId,
     })
     .eq("id", changeRequestId)
     .eq("status", "pending_payment")
     .select("id");
-  if ((claimed ?? []).length === 0) return; // 別経路で処理済み
+  if (claimErr) {
+    // DB障害と「既に処理済み(0件)」を区別する。前者を無視すると決済済みなのに
+    // 反映されないまま気づかれない恐れがあるため、必ず手動対応のアラートを出す
+    await sendAdminAlert(
+      "🚨 予約変更の反映クレームに失敗（要確認）",
+      `予約ID: ${bookingId}\n申請ID: ${changeRequestId}\nセッション: ${session.id}\nDB更新エラーのため反映を保留しました。Stripeダッシュボードで決済状況を確認し、手動対応してください。\nエラー: ${String(claimErr.message ?? claimErr)}`
+    );
+    return;
+  }
+  if ((claimed ?? []).length === 0) return; // 別経路で処理済み（Webhook重複配信等）
 
   // 適用直前に再度排他チェック（決済中に他の予約が入った場合の保険）
   const { data: venue } = await db

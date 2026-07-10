@@ -119,6 +119,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 原子的にpending→approvedへ遷移（二重クリック対策）。冒頭のstatusチェックは
+  // SELECT時点の値を見るだけで排他にならず、ほぼ同時に届いた2回目の承認リクエストが
+  // 両方ともapplyApprovedTimeChange（金額の加算RPCを含む）まで進んで二重加算する恐れがある
+  const { data: claimed, error: claimErr } = await db
+    .from("booking_change_requests")
+    .update({ status: "approved", decided_at: now.toISOString(), decided_by: "admin", admin_note: adminNote })
+    .eq("id", changeRequestId)
+    .eq("status", "pending")
+    .select("id");
+  if (claimErr) {
+    return NextResponse.json({ error: "承認処理に失敗しました。時間をおいて再度お試しください" }, { status: 500 });
+  }
+  if (!claimed || claimed.length === 0) {
+    return NextResponse.json({ error: "この申請は既に処理されています" }, { status: 409 });
+  }
+
   await applyApprovedTimeChange({
     bookingId: cr.booking_id,
     venue,
@@ -133,11 +149,6 @@ export async function POST(req: NextRequest) {
     reason: cr.reason || "お客様申請の時間変更",
     changeRequestId,
   });
-
-  // admin_note を別途反映
-  if (adminNote) {
-    await db.from("booking_change_requests").update({ admin_note: adminNote }).eq("id", changeRequestId);
-  }
 
   return NextResponse.json({
     ok: true,
