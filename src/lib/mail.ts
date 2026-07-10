@@ -3,7 +3,7 @@
  * RESEND_API_KEY 未設定の場合は何もしない（ローカル開発で動かしやすくするため）。
  */
 
-type MailInput = { to: string; subject: string; text: string };
+type MailInput = { to: string; subject: string; text: string; html?: string };
 
 /**
  * 日本語表示名を含むFromヘッダをRFC 2047エンコード（=?UTF-8?B?...?=）する。
@@ -21,7 +21,7 @@ function encodeFromHeader(from: string): string {
   return `=?UTF-8?B?${b64}?= <${addr}>`;
 }
 
-export async function sendMail({ to, subject, text }: MailInput): Promise<boolean> {
+export async function sendMail({ to, subject, text, html }: MailInput): Promise<boolean> {
   // trim: 環境変数に紛れた改行・空白でHTTPヘッダーが壊れるのを防ぐ
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
@@ -33,8 +33,9 @@ export async function sendMail({ to, subject, text }: MailInput): Promise<boolea
   const replyTo = (process.env.MAIL_REPLY_TO || "bluespace@bluestage-lcc.com").trim();
   // bodyにマルチバイト文字を含むとundiciがByteString変換で失敗するため、
   // 明示的にUint8Arrayに変換してから送信する（subject/textに日本語を載せるため必須）
+  // html指定時もtextは併記する（HTML非対応クライアント・スパム判定対策のフォールバック）
   const body = new TextEncoder().encode(
-    JSON.stringify({ from, to: [to], subject, text, reply_to: [replyTo] })
+    JSON.stringify({ from, to: [to], subject, text, ...(html ? { html } : {}), reply_to: [replyTo] })
   );
   // sendMailは「失敗してもthrowせずfalseを返す」契約で呼び出し元に使われる
   // （confirm.ts等がこれに依存し、メール失敗でWebhook処理全体を落とさないようにしている）ため、
@@ -88,7 +89,8 @@ async function sendDiscord(subject: string, text: string): Promise<boolean> {
  */
 export async function sendAdminAlert(
   subject: string,
-  text: string
+  text: string,
+  html?: string
 ): Promise<{ discord: boolean; email: boolean }> {
   const discord = await sendDiscord(subject, text);
   const admin = process.env.ADMIN_EMAIL?.trim();
@@ -97,7 +99,7 @@ export async function sendAdminAlert(
     return { discord, email: false };
   }
   try {
-    const email = await sendMail({ to: admin, subject: `[予約システム] ${subject}`, text });
+    const email = await sendMail({ to: admin, subject: `[予約システム] ${subject}`, text, html });
     return { discord, email };
   } catch (e) {
     console.error(`[mail] 管理者メール送信エラー: ${subject}`, e);

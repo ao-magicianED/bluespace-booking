@@ -202,10 +202,140 @@ function dateLabel(date: string): string {
   return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}(${DOW[jstDayOfWeek(date)]})`;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const LEVEL_COLOR: Record<AlertLevel, { bg: string; border: string; text: string }> = {
+  low: { bg: "#fef2f2", border: "#ef4444", text: "#b91c1c" },
+  high: { bg: "#f0fdf4", border: "#22c55e", text: "#15803d" },
+  normal: { bg: "#f9fafb", border: "#d1d5db", text: "#4b5563" },
+};
+
+/**
+ * テーブル行の高さだけで縦棒を表現するミニバー（position:absoluteを使わない）。
+ * GmailアプリやOutlook等、position:absoluteの挙動が不安定なメールクライアントでも崩れないようにするため。
+ */
+function miniBar(pct: number, barH: number, color: string): string {
+  const filled = Math.max(0, Math.min(barH, Math.round((pct / 100) * barH)));
+  const empty = barH - filled;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;width:22px;border-bottom:1px solid #e5e7eb;">
+    ${empty > 0 ? `<tr><td style="height:${empty}px;line-height:1px;font-size:0;">&nbsp;</td></tr>` : ""}
+    ${filled > 0 ? `<tr><td style="height:${filled}px;background:${color};border-radius:2px 2px 0 0;line-height:1px;font-size:0;">&nbsp;</td></tr>` : ""}
+  </table>`;
+}
+
+/** 日次レポートのHTMLメール本文を組み立てる（テーブルベース＋インラインCSSでGmail等の崩れを防ぐ） */
+function formatOccupancyReportHtml(data: OccupancyReportData): string {
+  const alertRows = LEVEL_ORDER.flatMap((level) =>
+    data.venues
+      .filter((v) => v.alert.level === level)
+      .map((v) => {
+        const c = LEVEL_COLOR[level];
+        const calNote = v.calendarOk ? "" : "（⚠️カレンダー未取得・自社予約のみで判定）";
+        return `<tr><td style="padding:8px 12px;border-left:4px solid ${c.border};background:${c.bg};border-radius:4px;font-size:14px;line-height:1.6;color:#111827;">
+          <span style="font-weight:700;color:${c.text};">${LEVEL_EMOJI[level]} ${escapeHtml(v.name)}${calNote}</span><br>
+          ${escapeHtml(v.alert.message)}
+        </td></tr><tr><td style="height:8px;line-height:8px;font-size:0;">&nbsp;</td></tr>`;
+      })
+  ).join("");
+
+  const maxWeekHours = Math.max(1, ...data.venues.flatMap((v) => [...v.pastWeeksHours, v.nextWeek.busyHours]));
+
+  const venueSections = data.venues
+    .map((v) => {
+      const barCells = v.nextDays
+        .map((d) => {
+          const pct = Math.min(100, Math.round((d.busyHours / maxWeekHours) * 100));
+          return `<td style="text-align:center;padding:4px 2px;font-size:11px;color:#6b7280;">
+            ${miniBar(pct, 40, "#3b82f6")}
+            <div style="margin-top:4px;">${dateLabel(d.date)}</div>
+            <div style="font-weight:600;color:#111827;">${d.busyHours > 0 ? fmtH(d.busyHours) : "0"}</div>
+          </td>`;
+        })
+        .join("");
+
+      const trendBars = v.pastWeeksHours
+        .map((h) => {
+          const pct = Math.min(100, Math.round((h / maxWeekHours) * 100));
+          return `<td style="text-align:center;padding:0 4px;">
+            ${miniBar(pct, 28, "#9ca3af")}
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">${fmtH(h)}</div>
+          </td>`;
+        })
+        .join("");
+
+      return `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:16px;">
+        <tr><td style="padding:14px 16px 4px;">
+          <div style="font-size:15px;font-weight:700;color:#111827;">
+            ● ${escapeHtml(v.name)}<span style="font-weight:400;color:#6b7280;font-size:12px;"> （営業 ${v.openHour}:00〜${v.closeHour}:00）${v.calendarOk ? "" : " ⚠️カレンダー取得失敗・自社予約のみで集計"}</span>
+          </div>
+        </td></tr>
+        <tr><td style="padding:6px 16px 0;font-size:13px;color:#374151;">
+          直近1週の埋まり: <b>${fmtH(v.lastWeek.busyHours)}</b> / ${fmtH(v.lastWeek.capacityHours)}（${fmtPct(v.lastWeek)}）
+        </td></tr>
+        <tr><td style="padding:10px 16px 0;font-size:12px;color:#6b7280;">週別推移（過去4週、平均 ${fmtH(v.avgWeekHours)}/週）</td></tr>
+        <tr><td style="padding:4px 16px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${trendBars}</tr></table>
+        </td></tr>
+        <tr><td style="padding:10px 16px 0;font-size:13px;color:#374151;">
+          来週の予約: <b>${fmtH(v.nextWeek.busyHours)}</b>（埋まり率 ${fmtPct(v.nextWeek)}）
+        </td></tr>
+        <tr><td style="padding:4px 16px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${barCells}</tr></table>
+        </td></tr>
+        <tr><td style="padding:10px 16px 14px;font-size:12px;color:#6b7280;border-top:1px solid #f3f4f6;margin-top:10px;">
+          ${data.today.slice(0, 4)}年の稼働率（自社確定・昨日まで）: <b>${fmtPct(v.yearOwn)}</b>　今月: <b>${fmtPct(v.monthOwn)}</b>
+        </td></tr>
+      </table>`;
+    })
+    .join("");
+
+  return `
+<div style="font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans',Meiryo,sans-serif;background:#f3f4f6;padding:24px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;">
+      <tr><td style="background:#1f2937;padding:20px 24px;">
+        <div style="color:#ffffff;font-size:18px;font-weight:700;">📊 稼働レポート</div>
+        <div style="color:#d1d5db;font-size:13px;margin-top:2px;">${data.today} 時点（「来週」= 今日からの7日間）</div>
+      </td></tr>
+      <tr><td style="padding:20px 24px 4px;">
+        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px;">■ アラート（来週の予約 vs 過去4週平均）</div>
+        ${
+          data.bookingsTruncated
+            ? `<div style="background:#fef3c7;color:#92400e;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:8px;">⚠️ 予約データが取得上限に達したため、数値が実際より少なく出ている可能性があります</div>`
+            : ""
+        }
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${alertRows}</table>
+      </td></tr>
+      <tr><td style="padding:12px 24px 0;">
+        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:12px;">■ 拠点別の詳細</div>
+        ${venueSections}
+      </td></tr>
+      <tr><td style="padding:0 24px 20px;">
+        <div style="font-size:11px;color:#9ca3af;line-height:1.6;border-top:1px solid #f3f4f6;padding-top:12px;">
+          埋まり時間 = 自社確定予約 + Googleカレンダーのbusy（外部サイト予約・手動ブロック）の重複なし合算<br>
+          年間・月別の稼働率は自社の確定予約のみ（外部サイト予約は含まない）
+        </div>
+        <div style="text-align:center;margin-top:16px;">
+          <a href="${siteUrl()}/admin/occupancy" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 20px;border-radius:6px;">稼働率ダッシュボードを見る</a>
+        </div>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</div>`;
+}
+
 /** 日次レポートのメール本文を組み立てる（Discordは先頭1990文字に切られるためアラートを先頭に置く） */
 export function formatOccupancyReport(data: OccupancyReportData): {
   subject: string;
   text: string;
+  html: string;
 } {
   const counts: Record<AlertLevel, number> = { low: 0, normal: 0, high: 0 };
   for (const v of data.venues) counts[v.alert.level]++;
@@ -256,21 +386,23 @@ export function formatOccupancyReport(data: OccupancyReportData): {
   lines.push("");
   lines.push("▼ 稼働率ダッシュボード");
   lines.push(`${siteUrl()}/admin/occupancy`);
-  return { subject, text: lines.join("\n") };
+  return { subject, text: lines.join("\n"), html: formatOccupancyReportHtml(data) };
 }
 
 /** cron用: 集計→本文生成までをまとめて実行する */
 export async function buildOccupancyReport(now: Date = new Date()): Promise<{
   subject: string;
   text: string;
+  html: string;
   alerts: Record<string, AlertLevel>;
   calendarErrors: string[];
 }> {
   const data = await collectOccupancyData(now);
-  const { subject, text } = formatOccupancyReport(data);
+  const { subject, text, html } = formatOccupancyReport(data);
   return {
     subject,
     text,
+    html,
     alerts: Object.fromEntries(data.venues.map((v) => [v.slug, v.alert.level])),
     calendarErrors: data.venues.filter((v) => !v.calendarOk).map((v) => v.slug),
   };

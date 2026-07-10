@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { subject, text, alerts, calendarErrors } = await buildOccupancyReport(new Date());
-    const delivered = await sendAdminAlert(subject, text);
+    const { subject, text, html, alerts, calendarErrors } = await buildOccupancyReport(new Date());
+    const delivered = await sendAdminAlert(subject, text, html);
     if (!delivered.discord && !delivered.email) {
       // レポートは生成できたが誰にも届いていない＝ジョブとしては失敗（Vercelのログで気づけるようにする）
       console.error("[cron/daily-report] 全チャネルで配信失敗（Discord・メールとも未達）");
