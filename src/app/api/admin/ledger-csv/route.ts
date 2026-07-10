@@ -3,7 +3,6 @@ import iconv from "iconv-lite";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { computeRepeatNumbers, formatMemberNo, realizedRevenue } from "@/lib/ledger";
-import { effectiveTotal } from "@/lib/adjustment";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";

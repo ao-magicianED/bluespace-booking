@@ -23,6 +23,11 @@ export function myBookingUrl(bookingId: string): string {
   return `${siteUrl()}/my/${bookingId}`;
 }
 
+/** レビュー投稿ページURL（review_tokenは予約ごとの秘密UUID） */
+export function reviewUrl(reviewToken: string): string {
+  return `${siteUrl()}/review/${reviewToken}`;
+}
+
 /** 住所からGoogleマップの検索リンクを作る（日本語住所を含むためencodeURIComponent必須） */
 export function mapSearchUrl(address: string): string {
   return `https://maps.google.com/?q=${encodeURIComponent(address)}`;

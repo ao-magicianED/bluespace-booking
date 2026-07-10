@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getDb, isDbConfigured } from "@/lib/supabase";
 import { getVenueContent } from "@/content/venues";
+import { getReviewAggregates } from "@/lib/reviews-db";
 import type { Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -42,11 +43,10 @@ export default async function HomePage() {
   }
 
   const db = getDb();
-  const { data: venues, error } = await db
-    .from("venues")
-    .select("*")
-    .eq("active", true)
-    .order("name");
+  const [{ data: venues, error }, reviewAggregates] = await Promise.all([
+    db.from("venues").select("*").eq("active", true).order("name"),
+    getReviewAggregates(),
+  ]);
 
   if (error) {
     return <div className="notice error">拠点情報の取得に失敗しました。</div>;
@@ -103,6 +103,12 @@ export default async function HomePage() {
               </div>
               <div className="venue-card-body">
                 <h2>{v.name}</h2>
+                {reviewAggregates[v.id] && (
+                  <p className="venue-card-rating">
+                    <span className="review-stars">★</span> {reviewAggregates[v.id].average.toFixed(1)}
+                    <span className="policy">（{reviewAggregates[v.id].count}件）</span>
+                  </p>
+                )}
                 {c && <p className="addr">🚉 {c.station}</p>}
                 {c && <p className="addr">👥 {c.capacityShort}</p>}
                 <p className="price">

@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
 import { jstToUtc, todayJst } from "@/lib/slots";
+import { realizedRevenue } from "@/lib/ledger";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -62,12 +63,18 @@ export default async function AdminPage({
 
   // 統計: 今後の確定件数 / 今月の確定売上 / 同期失敗
   const monthStart = jstToUtc(todayJst().slice(0, 8) + "01", 0).toISOString();
-  const [upcomingRes, monthRes, failedRes] = await Promise.all([
+  const [upcomingRes, monthRes, failedRes, pendingReviewsRes] = await Promise.all([
     db.from("bookings").select("id", { count: "exact", head: true }).eq("booking_status", "confirmed").gt("end_at", nowIso),
-    db.from("bookings").select("total_amount, refunded_amount").eq("booking_status", "confirmed").gte("start_at", monthStart),
+    db
+      .from("bookings")
+      .select("payment_status, total_amount, refunded_amount, extra_paid_amount")
+      .eq("booking_status", "confirmed")
+      .gte("start_at", monthStart),
     db.from("bookings").select("*, venues(name)").eq("booking_status", "confirmed").eq("calendar_sync_status", "failed").gt("end_at", nowIso),
+    db.from("booking_reviews").select("id", { count: "exact", head: true }).eq("status", "pending"),
   ]);
-  const monthSales = (monthRes.data ?? []).reduce((s, b) => s + b.total_amount - (b.refunded_amount ?? 0), 0);
+  const pendingReviews = pendingReviewsRes.count ?? 0;
+  const monthSales = (monthRes.data ?? []).reduce((s, b) => s + realizedRevenue(b), 0);
   const failed = (failedRes.data ?? []) as Row[];
 
   return (
@@ -77,11 +84,17 @@ export default async function AdminPage({
         <span>
           <Link href="/admin/analytics" className="policy">📈 分析</Link>
           {"　"}
+          <Link href="/admin/occupancy" className="policy">📊 稼働率</Link>
+          {"　"}
           <Link href="/admin/ledger" className="policy">📒 予約台帳・CSV</Link>
           {"　"}
           <Link href="/admin/venues" className="policy">🏢 拠点情報の編集（写真・FAQ・入退室案内）</Link>
           {"　"}
           <Link href="/admin/coupons" className="policy">🎟️ クーポン発行</Link>
+          {"　"}
+          <Link href="/admin/reviews" className="policy">
+            ⭐ レビュー管理{pendingReviews > 0 ? `（承認待ち${pendingReviews}件）` : ""}
+          </Link>
           {"　"}
           <Link href="/admin/license" className="policy">🔑 ライセンス管理</Link>
           {"　"}

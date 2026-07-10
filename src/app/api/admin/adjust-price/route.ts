@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { getStripe } from "@/lib/stripe";
-import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "@/lib/adjustment";
+import {
+  effectiveTotal,
+  collectPaymentIntents,
+  refundFromPaymentIntents,
+  paymentStatusAfterRefund,
+} from "@/lib/adjustment";
 import { sendMail, sendAdminAlert } from "@/lib/mail";
 import { formatBookingPeriod } from "@/lib/confirm";
 import type { Booking, Venue } from "@/lib/types";
@@ -64,6 +69,22 @@ export async function POST(req: NextRequest) {
     .limit(1);
   if ((pending ?? []).length > 0) {
     return NextResponse.json({ error: "お客様の追加決済を待っている調整があります。先にそちらを処理してください。" }, { status: 409 });
+  }
+
+  // 進行中の時間変更申請（承認待ち・延長の決済待ち）がある場合も拒否。
+  // 申請の金額は現在の実効金額から計算されているうえ、全額返金（refunded）後に
+  // 延長の決済だけが成立すると extra_paid_amount と payment_status の整合が崩れる
+  const { data: pendingCr } = await db
+    .from("booking_change_requests")
+    .select("id")
+    .eq("booking_id", bookingId)
+    .in("status", ["pending", "pending_payment"])
+    .limit(1);
+  if ((pendingCr ?? []).length > 0) {
+    return NextResponse.json(
+      { error: "進行中の時間変更申請があります。先にそちらを承認・却下してから料金を変更してください。" },
+      { status: 409 }
+    );
   }
 
   const currentEffective = effectiveTotal(booking);
@@ -143,16 +164,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "返金処理に失敗しました。管理者に連絡してください" }, { status: 500 });
     }
 
-    // DB更新（adjusted_totalは既にclaim済みなので、返金結果を反映するだけでよい）
-    const newRefunded = (booking.refunded_amount ?? 0) + (refundAmount - remainingAmount);
-    await db
-      .from("bookings")
-      .update({
-        refunded_amount: newRefunded,
-        payment_status: newRefunded >= booking.total_amount ? "refunded" : "partially_refunded",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", bookingId);
+    // DB更新（adjusted_totalは既にclaim済みなので、返金結果を反映するだけでよい）。
+    // 1円も返金できていない場合はステータスを動かさない（下の管理者通知で手動対応）
+    const actuallyRefunded = refundAmount - remainingAmount;
+    if (actuallyRefunded > 0) {
+      await db
+        .from("bookings")
+        .update({
+          refunded_amount: (booking.refunded_amount ?? 0) + actuallyRefunded,
+          payment_status: paymentStatusAfterRefund(booking, actuallyRefunded),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", bookingId);
+    }
 
     await db.from("booking_adjustments").insert({
       booking_id: bookingId,

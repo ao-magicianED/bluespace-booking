@@ -623,7 +623,7 @@ async function handleAdjustmentCompleted(session: Stripe.Checkout.Session): Prom
   // 予約がキャンセルされていないか
   const { data: booking } = await db
     .from("bookings")
-    .select("booking_status, customer_name, customer_email")
+    .select("booking_status, customer_name, customer_email, extra_paid_amount")
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking) problems.push("予約が存在しない");
@@ -665,11 +665,13 @@ async function handleAdjustmentCompleted(session: Stripe.Checkout.Session): Prom
 
   if ((updated ?? []).length === 0) return; // 既に処理済み
 
-  // 予約のadjusted_totalを更新
+  // 予約のadjusted_totalを更新。extra_paid_amountも積み上げる
+  // （実収額の二重控除を避けるため adjusted_total とは別に「実際に払われた増額累計」を管理する）
   await db
     .from("bookings")
     .update({
       adjusted_total: adj.new_amount,
+      extra_paid_amount: (booking.extra_paid_amount ?? 0) + adj.amount_delta,
       updated_at: new Date().toISOString(),
     })
     .eq("id", bookingId);

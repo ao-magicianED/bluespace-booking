@@ -2,7 +2,12 @@ import { getDb } from "./supabase";
 import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
 import { updateBookingEventTime, type BookingEventDetails } from "./google-calendar";
-import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
+import {
+  effectiveTotal,
+  collectPaymentIntents,
+  refundFromPaymentIntents,
+  paymentStatusAfterRefund,
+} from "./adjustment";
 import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
 import type { PriceBreakdown } from "./pricing";
@@ -37,6 +42,11 @@ export async function applyApprovedTimeChange(params: {
   if (amounts.newAmount !== currentEffective) {
     updates.adjusted_total = amounts.newAmount;
   }
+  // 増額分はここで初めて「実際に支払われた」ことが確定する（呼び出し元は決済完了後のみ
+  // extraAmount>0で呼ぶ。実収額の二重控除を避けるため adjusted_total とは別に積み上げる）
+  if (amounts.extraAmount > 0) {
+    updates.extra_paid_amount = (booking.extra_paid_amount ?? 0) + amounts.extraAmount;
+  }
 
   let actuallyRefunded = 0;
   let refundRemaining = 0;
@@ -58,11 +68,11 @@ export async function applyApprovedTimeChange(params: {
         refundId = r.refundIds[0] ?? null;
         refundRemaining = r.remainingAmount;
         actuallyRefunded = amounts.refundAmount - refundRemaining;
-        updates.refunded_amount = (booking.refunded_amount ?? 0) + actuallyRefunded;
-        updates.payment_status =
-          (booking.refunded_amount ?? 0) + actuallyRefunded >= booking.total_amount
-            ? "refunded"
-            : "partially_refunded";
+        // 1円も返金できていない場合はステータスを動かさない（返金失敗として手動対応アラートに任せる）
+        if (actuallyRefunded > 0) {
+          updates.refunded_amount = (booking.refunded_amount ?? 0) + actuallyRefunded;
+          updates.payment_status = paymentStatusAfterRefund(booking, actuallyRefunded);
+        }
       } catch (e) {
         await sendAdminAlert(
           "🚨 時間変更の自動返金失敗（手動対応必要）",

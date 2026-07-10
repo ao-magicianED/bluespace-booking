@@ -59,10 +59,10 @@ export async function sendMail({ to, subject, text }: MailInput): Promise<boolea
   }
 }
 
-/** Discordチャンネルへ通知（DISCORD_WEBHOOK_URL未設定ならスキップ） */
-async function sendDiscord(subject: string, text: string): Promise<void> {
+/** Discordチャンネルへ通知（DISCORD_WEBHOOK_URL未設定ならスキップ）。送信成功でtrue */
+async function sendDiscord(subject: string, text: string): Promise<boolean> {
   const url = process.env.DISCORD_WEBHOOK_URL;
-  if (!url) return;
+  if (!url) return false;
   try {
     // Discordの上限2000文字に収める
     const content = `**【予約システム】${subject}**\n${text}`.slice(0, 1990);
@@ -73,23 +73,34 @@ async function sendDiscord(subject: string, text: string): Promise<void> {
     });
     if (!res.ok) {
       console.error(`[discord] 送信失敗 (${res.status}): ${await res.text()}`);
+      return false;
     }
+    return true;
   } catch (e) {
     console.error("[discord] 送信エラー:", e);
+    return false;
   }
 }
 
-/** 管理者通知（メール＋Discordの二段構え。通知失敗で業務処理を止めないようthrowしない） */
-export async function sendAdminAlert(subject: string, text: string): Promise<void> {
-  await sendDiscord(subject, text);
+/**
+ * 管理者通知（メール＋Discordの二段構え。通知失敗で業務処理を止めないようthrowしない）。
+ * 戻り値でチャネルごとの配信成否を返す（呼び出し側は無視してよい）。
+ */
+export async function sendAdminAlert(
+  subject: string,
+  text: string
+): Promise<{ discord: boolean; email: boolean }> {
+  const discord = await sendDiscord(subject, text);
   const admin = process.env.ADMIN_EMAIL?.trim();
   if (!admin) {
     console.warn(`[mail] ADMIN_EMAIL未設定: ${subject}`);
-    return;
+    return { discord, email: false };
   }
   try {
-    await sendMail({ to: admin, subject: `[予約システム] ${subject}`, text });
+    const email = await sendMail({ to: admin, subject: `[予約システム] ${subject}`, text });
+    return { discord, email };
   } catch (e) {
     console.error(`[mail] 管理者メール送信エラー: ${subject}`, e);
+    return { discord, email: false };
   }
 }

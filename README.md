@@ -18,6 +18,6 @@ npm run build  # 本番ビルド確認
 
 ## 構成
 
-- `src/app/` — ページとAPIルート（availability / checkout / webhooks/stripe / cron/maintenance）
+- `src/app/` — ページとAPIルート（availability / checkout / webhooks/stripe / cron/maintenance / cron/daily-report=稼働レポート）
 - `src/lib/` — コアロジック（slots=スロット計算, pricing=価格計算, confirm=確定後処理 など）
 - `supabase/migrations/` — DBスキーマ（Supabase SQL Editorで実行）

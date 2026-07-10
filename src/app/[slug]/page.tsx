@@ -11,6 +11,10 @@ import BookingGrid from "@/components/BookingGrid";
 import AvailabilityDigest from "@/components/AvailabilityDigest";
 import PhotoGallery from "@/components/PhotoGallery";
 import FloatingNav from "@/components/FloatingNav";
+import ReviewSection from "@/components/ReviewSection";
+import { aggregateReviews } from "@/lib/reviews";
+import { getPublishedReviews } from "@/lib/reviews-db";
+import { describePolicy } from "@/lib/cancellation";
 import type { VenueOption } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +59,7 @@ export default async function VenuePage({
   if (!venue) notFound();
   const content = getVenueContent(slug);
 
-  const [initial, optionsResult, user, othersResult, photosResult] = await Promise.all([
+  const [initial, optionsResult, user, othersResult, photosResult, publishedReviews] = await Promise.all([
     getAvailability(venue, todayJst(), 7),
     getDb()
       .from("venue_options")
@@ -76,8 +80,10 @@ export default async function VenuePage({
       .eq("venue_id", venue.id)
       .order("cat_sort", { ascending: true })
       .order("sort", { ascending: true }),
+    getPublishedReviews(venue.id),
   ]);
   const options = (optionsResult.data ?? []) as VenueOption[];
+  const reviewAggregate = aggregateReviews(publishedReviews.map((r) => r.rating));
 
   // ギャラリー: DB（管理画面で編集可）を優先し、無ければコード内の静的定義へフォールバック
   const photoRows = (photosResult.data ?? []) as {
@@ -161,6 +167,18 @@ export default async function VenuePage({
             closes: "23:59",
           },
           priceRange: `¥${venue.hourly_price.toLocaleString()}〜¥${(venue.holiday_hourly_price ?? venue.hourly_price).toLocaleString()}/時間`,
+          // 実利用者レビューが1件以上あるときだけ星評価を検索結果に出す（AggregateRating）
+          ...(reviewAggregate.count > 0
+            ? {
+                aggregateRating: {
+                  "@type": "AggregateRating",
+                  ratingValue: reviewAggregate.average,
+                  reviewCount: reviewAggregate.count,
+                  bestRating: 5,
+                  worstRating: 1,
+                },
+              }
+            : {}),
           parentOrganization: {
             "@type": "Organization",
             name: "ブルーステージ合同会社",
@@ -205,6 +223,17 @@ export default async function VenuePage({
           <p className="venue-meta">
             🚉 {content?.station ?? venue.address}　👥 {content?.capacityShort ?? ""}
           </p>
+          {reviewAggregate.count > 0 && (
+            <p className="venue-rating-line">
+              <a href="#reviews">
+                <span className="review-stars">
+                  {"★".repeat(Math.round(reviewAggregate.average))}
+                  {"☆".repeat(5 - Math.round(reviewAggregate.average))}
+                </span>{" "}
+                {reviewAggregate.average.toFixed(1)}（{reviewAggregate.count}件のレビュー）
+              </a>
+            </p>
+          )}
           <p>
             <strong>{priceLine}</strong>
             ・30分単位（最大{venue.max_hours}時間連続）・24時間営業
@@ -276,6 +305,17 @@ export default async function VenuePage({
           公式サイトのご予約は仲介手数料がかからないため、いつでも最安値です。
         </p>
         <BookingGrid venueSlug={venue.slug} initial={initial} options={options} initialForm={initialForm} isLoggedIn={!!user} />
+        <details className="faq-item cancel-policy-box">
+          <summary>キャンセルポリシー（ご予約前にご確認ください）</summary>
+          <ul>
+            {describePolicy(venue.cancellation_policy ?? null).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <p className="policy">
+            会員登録済みの方はマイページからワンクリックでキャンセル・自動返金ができます。
+          </p>
+        </details>
       </section>
 
       {content && (
@@ -353,20 +393,11 @@ export default async function VenuePage({
             </div>
           </section>
 
-          <section className="venue-section">
-            <h2>ご利用者の声</h2>
-            <div className="review-grid">
-              {content.reviews.map((r) => (
-                <figure key={r.name} className="review-card">
-                  <div className="review-avatar">{r.initial}</div>
-                  <blockquote>{r.quote}</blockquote>
-                  <figcaption>
-                    {r.name}（{r.role}）
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
-          </section>
+          <ReviewSection
+            reviews={publishedReviews}
+            aggregate={reviewAggregate}
+            staticReviews={content.reviews}
+          />
 
           <section className="venue-section">
             <h2>よくある質問</h2>

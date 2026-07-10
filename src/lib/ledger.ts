@@ -1,4 +1,3 @@
-import { effectiveTotal } from "./adjustment";
 import type { Booking } from "./types";
 
 /** 会員番号の表示形式（例: BS-00012） */
@@ -11,13 +10,20 @@ export function formatMemberNo(no: number | null | undefined): string {
  * 実収額（返金控除後）。入金実績がある予約＝paid（確定）と partially_refunded
  * （部分返金キャンセル＝キャンセル料が残る）を対象にする。
  * これにより、キャンセル料収入が売上集計から漏れない。
- * adjusted_totalがあればそちらを基準にする（追加請求の入金分は元amountに上乗せされていない）。
+ *
+ * adjusted_total は使わない（意図的）: adjusted_total は増額でも減額でも更新されるが、
+ * 減額（時間短縮・料金減額）の場合は「返金後の目標金額」であり、その差額はすでに
+ * refunded_amount にも計上されている。ここで adjusted_total - refunded_amount を計算すると
+ * 減額分の返金が二重に差し引かれてしまう。
+ * 実収額 = total_amount（当初支払額）+ extra_paid_amount（増額で実際に払われた累計額）
+ *          - refunded_amount（返金累計額）。extra_paid_amountは増額確定時のみ加算され、
+ * 減額では変更されないため、二重控除は起きない。
  */
 export function realizedRevenue(
-  b: Pick<Booking, "payment_status" | "total_amount" | "refunded_amount" | "adjusted_total">
+  b: Pick<Booking, "payment_status" | "total_amount" | "refunded_amount" | "extra_paid_amount">
 ): number {
   if (b.payment_status === "paid" || b.payment_status === "partially_refunded") {
-    return effectiveTotal(b) - (b.refunded_amount ?? 0);
+    return b.total_amount + (b.extra_paid_amount ?? 0) - (b.refunded_amount ?? 0);
   }
   return 0;
 }
