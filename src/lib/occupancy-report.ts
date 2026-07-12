@@ -26,13 +26,22 @@ import type { TimeRange, Venue } from "./types";
 /** アラート比較に使う過去の週数 */
 export const PAST_WEEKS = 4;
 
+/** DBスナップショットとして毎回再計算する日数（cronが数日止まっても次回実行時に欠損を埋められるように） */
+export const SNAPSHOT_BACKFILL_DAYS = 3;
+
 export type VenueOccupancy = {
+  id: string;
   slug: string;
   name: string;
   openHour: number;
   closeHour: number;
   /** GoogleカレンダーのFreeBusy取得に成功したか（falseなら自社予約のみで集計） */
   calendarOk: boolean;
+  /**
+   * 直近数日分の日別実績（DBスナップショット保存用）。cronが1日止まっても次回実行時に
+   * 埋まるよう、前日だけでなくSNAPSHOT_BACKFILL_DAYS日分を毎回計算し直す。
+   */
+  recentDays: { date: string; own: OccupancySummary; combined: OccupancySummary }[];
   /** 直近1週（昨日までの7日間）: 外部予約・ブロック込み */
   lastWeek: OccupancySummary;
   /** 過去4週の週別埋まり時間（古い順: [4週前, 3週前, 2週前, 直近週]） */
@@ -144,6 +153,16 @@ export async function collectOccupancyData(now: Date = new Date()): Promise<Occu
       const nextWeek = occupancyForDates(venue, combined, today, 7);
       const nextDays = dailyOccupancy(venue, combined, today, 7);
 
+      const recentDays: VenueOccupancy["recentDays"] = [];
+      for (let k = 1; k <= SNAPSHOT_BACKFILL_DAYS; k++) {
+        const date = addDaysJst(today, -k);
+        recentDays.push({
+          date,
+          own: occupancyForDates(venue, own, date, 1),
+          combined: occupancyForDates(venue, combined, date, 1),
+        });
+      }
+
       const yearOwn = occupancyForDates(venue, own, yearStart, daysBetweenJst(yearStart, today));
       const monthStart = `${today.slice(0, 7)}-01`;
       const monthOwn = occupancyForDates(venue, own, monthStart, daysBetweenJst(monthStart, today));
@@ -164,11 +183,13 @@ export async function collectOccupancyData(now: Date = new Date()): Promise<Occu
       }
 
       return {
+        id: venue.id,
         slug: venue.slug,
         name: venue.name,
         openHour: venue.open_hour,
         closeHour: venue.close_hour,
         calendarOk,
+        recentDays,
         lastWeek,
         pastWeeksHours,
         avgWeekHours,
@@ -244,13 +265,12 @@ function formatOccupancyReportHtml(data: OccupancyReportData): string {
       })
   ).join("");
 
-  const maxWeekHours = Math.max(1, ...data.venues.flatMap((v) => [...v.pastWeeksHours, v.nextWeek.busyHours]));
-
   const venueSections = data.venues
     .map((v) => {
+      // 日別バーは営業時間に対する稼働率で表示（週の最大値を分母にすると日別の埋まり具合が実際より低く見えてしまうため）
       const barCells = v.nextDays
         .map((d) => {
-          const pct = Math.min(100, Math.round((d.busyHours / maxWeekHours) * 100));
+          const pct = Math.min(100, Math.round(d.rate * 100));
           return `<td style="text-align:center;padding:4px 2px;font-size:11px;color:#6b7280;">
             ${miniBar(pct, 40, "#3b82f6")}
             <div style="margin-top:4px;">${dateLabel(d.date)}</div>
@@ -259,9 +279,11 @@ function formatOccupancyReportHtml(data: OccupancyReportData): string {
         })
         .join("");
 
+      // 週別バーは過去4週どうしの相対比較なので、来週の値は分母に含めない
+      const maxTrendWeekHours = Math.max(1, ...v.pastWeeksHours);
       const trendBars = v.pastWeeksHours
         .map((h) => {
-          const pct = Math.min(100, Math.round((h / maxWeekHours) * 100));
+          const pct = Math.min(100, Math.round((h / maxTrendWeekHours) * 100));
           return `<td style="text-align:center;padding:0 4px;">
             ${miniBar(pct, 28, "#9ca3af")}
             <div style="font-size:11px;color:#6b7280;margin-top:2px;">${fmtH(h)}</div>
@@ -389,6 +411,33 @@ export function formatOccupancyReport(data: OccupancyReportData): {
   return { subject, text: lines.join("\n"), html: formatOccupancyReportHtml(data) };
 }
 
+export type DailySnapshot = {
+  venueId: string;
+  date: string;
+  ownBusyHours: number;
+  /** カレンダー取得に失敗した日はnull（外部予約分を含まない不完全な値を「正常値」として保存しないため） */
+  combinedBusyHours: number | null;
+  capacityHours: number;
+};
+
+/**
+ * 拠点別の集計データからDBスナップショット用のフラットな配列を組み立てる。
+ * 予約取得が打ち切られた回はown側の数値も信用できないため空にする。
+ * カレンダー取得に失敗した拠点はcombinedBusyHoursをnullにする（外部予約分を含まない不完全な値を「正常値」として保存しないため）。
+ */
+export function buildSnapshots(data: OccupancyReportData): DailySnapshot[] {
+  if (data.bookingsTruncated) return [];
+  return data.venues.flatMap((v) =>
+    v.recentDays.map((d) => ({
+      venueId: v.id,
+      date: d.date,
+      ownBusyHours: d.own.busyHours,
+      combinedBusyHours: v.calendarOk ? d.combined.busyHours : null,
+      capacityHours: d.own.capacityHours,
+    }))
+  );
+}
+
 /** cron用: 集計→本文生成までをまとめて実行する */
 export async function buildOccupancyReport(now: Date = new Date()): Promise<{
   subject: string;
@@ -396,6 +445,8 @@ export async function buildOccupancyReport(now: Date = new Date()): Promise<{
   html: string;
   alerts: Record<string, AlertLevel>;
   calendarErrors: string[];
+  /** 直近数日分の拠点別スナップショット（DB蓄積用） */
+  snapshots: DailySnapshot[];
 }> {
   const data = await collectOccupancyData(now);
   const { subject, text, html } = formatOccupancyReport(data);
@@ -405,5 +456,6 @@ export async function buildOccupancyReport(now: Date = new Date()): Promise<{
     html,
     alerts: Object.fromEntries(data.venues.map((v) => [v.slug, v.alert.level])),
     calendarErrors: data.venues.filter((v) => !v.calendarOk).map((v) => v.slug),
+    snapshots: buildSnapshots(data),
   };
 }
