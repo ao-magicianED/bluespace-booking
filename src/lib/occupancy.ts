@@ -1,4 +1,4 @@
-import { addDaysJst, jstToUtc } from "./slots";
+import { addDaysJst, jstDayOfWeek, jstToUtc } from "./slots";
 import type { TimeRange, Venue } from "./types";
 
 /**
@@ -161,4 +161,63 @@ export function judgeAlert(nextWeekHours: number, avgWeekHours: number): Occupan
     ratioPercent: percent,
     message: `来週の予約${fmt(nextWeekHours)}hは過去4週平均${fmt(avgWeekHours)}hの${percent}%で平常圏です。静観で問題ありません`,
   };
+}
+
+export type HeatmapCell = {
+  busyHours: number;
+  capacityHours: number;
+  /** capacityHoursが0（バケット幅が営業時間の端数に満たない等）ならnull */
+  rate: number | null;
+  /** このセルの集計に使った日数（通常はnumWeeksと一致） */
+  sampleDays: number;
+};
+
+/**
+ * 曜日×時間帯バケットの稼働ヒートマップを計算する（過去numWeeks週分、fromDateを含まない）。
+ * fromDateを含めると集計中の当日分が混ざり平均が歪むため、常に「昨日まで」を対象にする。
+ * バケットは営業時間（open_hour〜close_hour）内のみ生成し、bucketHoursで割り切れない
+ * 最後のバケットは端数の幅になる（capacityHoursはバケットごとに実際の幅を使うため歪まない）。
+ */
+export function weekdayTimeHeatmap(
+  venue: Pick<Venue, "open_hour" | "close_hour">,
+  busy: TimeRange[],
+  fromDate: string,
+  numWeeks: number,
+  bucketHours: number
+): HeatmapCell[][] {
+  const merged = mergeRanges(busy);
+  const bucketCount = Math.ceil((venue.close_hour - venue.open_hour) / bucketHours);
+  const cells: HeatmapCell[][] = Array.from({ length: 7 }, () =>
+    Array.from({ length: bucketCount }, () => ({
+      busyHours: 0,
+      capacityHours: 0,
+      rate: null as number | null,
+      sampleDays: 0,
+    }))
+  );
+
+  const totalDays = numWeeks * 7;
+  for (let i = 1; i <= totalDays; i++) {
+    const date = addDaysJst(fromDate, -i);
+    const dow = jstDayOfWeek(date);
+    const midnight = jstToUtc(date, 0).getTime();
+    for (let b = 0; b < bucketCount; b++) {
+      const bucketStartHour = venue.open_hour + b * bucketHours;
+      const bucketEndHour = Math.min(venue.open_hour + (b + 1) * bucketHours, venue.close_hour);
+      const windowStart = new Date(midnight + bucketStartHour * HOUR_MS);
+      const windowEnd = new Date(midnight + bucketEndHour * HOUR_MS);
+      const busyHours = overlapMs(merged, windowStart, windowEnd) / HOUR_MS;
+      const cell = cells[dow][b];
+      cell.busyHours += busyHours;
+      cell.capacityHours += bucketEndHour - bucketStartHour;
+      cell.sampleDays += 1;
+    }
+  }
+
+  for (const row of cells) {
+    for (const cell of row) {
+      cell.rate = cell.capacityHours > 0 ? cell.busyHours / cell.capacityHours : null;
+    }
+  }
+  return cells;
 }

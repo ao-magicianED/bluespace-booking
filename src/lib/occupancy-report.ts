@@ -7,13 +7,72 @@ import {
   judgeAlert,
   mergeRanges,
   occupancyForDates,
+  weekdayTimeHeatmap,
   type AlertLevel,
   type DayOccupancy,
+  type HeatmapCell,
   type OccupancyAlert,
   type OccupancySummary,
 } from "./occupancy";
 import { siteUrl } from "./site-url";
 import type { TimeRange, Venue } from "./types";
+
+/**
+ * アクティブ拠点一覧と、指定期間（下限含む・上限含まない）に重なる自社確定予約を取得する。
+ * cronの日次レポートと管理画面のヒートマップの両方から使う共通ヘルパー。
+ */
+async function fetchVenuesAndOwnBookings(
+  lowerDateInclusive: string,
+  upperDateExclusive: string
+): Promise<{ venues: Venue[]; ownByVenue: Map<string, TimeRange[]>; bookingsTruncated: boolean }> {
+  const db = getDb();
+  const { data: venueRows, error: venueErr } = await db
+    .from("venues")
+    .select("*")
+    .eq("active", true)
+    .order("name");
+  if (venueErr) throw new Error(`拠点取得エラー: ${venueErr.message}`);
+  const venues = (venueRows ?? []) as Venue[];
+
+  // PostgREST（Supabase）はサーバー側Max Rows（既定1000行）で1回のレスポンスを
+  // 黙って切り詰めるため、大きなlimit指定は当てにならない。.range()でページングして全件取る。
+  const PAGE = 1000;
+  const MAX_PAGES = 50; // 安全弁: 想定外の件数でタイムアウトしないように打ち切る
+  const venueIds = venues.map((v) => v.id);
+  const bookingRows: { venue_id: string; start_at: string; end_at: string }[] = [];
+  let bookingsTruncated = false;
+  for (let page = 0; venueIds.length > 0; page++) {
+    if (page >= MAX_PAGES) {
+      // 打ち切った場合は数値が過少になるため、黙って集計せず警告を返す
+      bookingsTruncated = true;
+      console.error(`[occupancy] 予約件数が${PAGE * MAX_PAGES}件を超過。集計が不完全な可能性`);
+      break;
+    }
+    const from = page * PAGE;
+    const { data, error } = await db
+      .from("bookings")
+      .select("venue_id, start_at, end_at")
+      .eq("booking_status", "confirmed")
+      .in("venue_id", venueIds)
+      .lt("start_at", jstToUtc(upperDateExclusive, 0).toISOString())
+      .gt("end_at", jstToUtc(lowerDateInclusive, 0).toISOString())
+      .order("start_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`予約取得エラー: ${error.message}`);
+    bookingRows.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+
+  const ownByVenue = new Map<string, TimeRange[]>();
+  for (const b of bookingRows) {
+    const list = ownByVenue.get(b.venue_id) ?? [];
+    list.push({ start: new Date(b.start_at), end: new Date(b.end_at) });
+    ownByVenue.set(b.venue_id, list);
+  }
+
+  return { venues, ownByVenue, bookingsTruncated };
+}
 
 /**
  * 稼働状況の日次レポート:
@@ -69,7 +128,6 @@ export type OccupancyReportData = {
 
 /** 全アクティブ拠点の稼働状況を集計する（cronの日次レポートと管理画面の両方から使う） */
 export async function collectOccupancyData(now: Date = new Date()): Promise<OccupancyReportData> {
-  const db = getDb();
   const today = todayJst(now);
   const yearStart = `${today.slice(0, 4)}-01-01`;
   const pastStart = addDaysJst(today, -7 * PAST_WEEKS);
@@ -77,50 +135,10 @@ export async function collectOccupancyData(now: Date = new Date()): Promise<Occu
   // 年初と過去4週の早いほうから来週末までの予約をまとめて1クエリで取る
   const lowerDate = yearStart < pastStart ? yearStart : pastStart;
 
-  const { data: venueRows, error: venueErr } = await db
-    .from("venues")
-    .select("*")
-    .eq("active", true)
-    .order("name");
-  if (venueErr) throw new Error(`拠点取得エラー: ${venueErr.message}`);
-  const venues = (venueRows ?? []) as Venue[];
-
-  // PostgREST（Supabase）はサーバー側Max Rows（既定1000行）で1回のレスポンスを
-  // 黙って切り詰めるため、大きなlimit指定は当てにならない。.range()でページングして全件取る。
-  const PAGE = 1000;
-  const MAX_PAGES = 50; // 安全弁: 想定外の件数でcronがタイムアウトしないように打ち切る
-  const venueIds = venues.map((v) => v.id);
-  const bookingRows: { venue_id: string; start_at: string; end_at: string }[] = [];
-  let bookingsTruncated = false;
-  for (let page = 0; venueIds.length > 0; page++) {
-    if (page >= MAX_PAGES) {
-      // 打ち切った場合は数値が過少になるため、黙って集計せずレポートに警告を出す
-      bookingsTruncated = true;
-      console.error(`[occupancy] 予約件数が${PAGE * MAX_PAGES}件を超過。集計が不完全な可能性`);
-      break;
-    }
-    const from = page * PAGE;
-    const { data, error } = await db
-      .from("bookings")
-      .select("venue_id, start_at, end_at")
-      .eq("booking_status", "confirmed")
-      .in("venue_id", venueIds)
-      .lt("start_at", jstToUtc(nextEnd, 0).toISOString())
-      .gt("end_at", jstToUtc(lowerDate, 0).toISOString())
-      .order("start_at", { ascending: true })
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`予約取得エラー: ${error.message}`);
-    bookingRows.push(...(data ?? []));
-    if (!data || data.length < PAGE) break;
-  }
-
-  const ownByVenue = new Map<string, TimeRange[]>();
-  for (const b of bookingRows) {
-    const list = ownByVenue.get(b.venue_id) ?? [];
-    list.push({ start: new Date(b.start_at), end: new Date(b.end_at) });
-    ownByVenue.set(b.venue_id, list);
-  }
+  const { venues, ownByVenue, bookingsTruncated } = await fetchVenuesAndOwnBookings(
+    lowerDate,
+    nextEnd
+  );
 
   const results = await Promise.all(
     venues.map(async (venue): Promise<VenueOccupancy> => {
@@ -458,4 +476,76 @@ export async function buildOccupancyReport(now: Date = new Date()): Promise<{
     calendarErrors: data.venues.filter((v) => !v.calendarOk).map((v) => v.slug),
     snapshots: buildSnapshots(data),
   };
+}
+
+/** ヒートマップ集計に使う過去週数（今日を含まない） */
+export const HEATMAP_WEEKS = 12;
+/** ヒートマップの時間帯バケット幅（時間） */
+export const HEATMAP_BUCKET_HOURS = 2;
+
+export type VenueHeatmap = {
+  slug: string;
+  name: string;
+  openHour: number;
+  closeHour: number;
+  /** GoogleカレンダーのFreeBusy取得に成功したか（falseなら自社予約のみで集計） */
+  calendarOk: boolean;
+  /** [曜日 0(日)〜6(土)][時間帯バケット] */
+  cells: HeatmapCell[][];
+};
+
+export type OccupancyHeatmapData = {
+  /** JSTの基準日（この日を含まない過去weeks週分が集計対象） */
+  today: string;
+  weeks: number;
+  bucketHours: number;
+  venues: VenueHeatmap[];
+  /** 予約取得が上限で打ち切られた疑いがある（数値が過少になっている可能性） */
+  bookingsTruncated: boolean;
+};
+
+/**
+ * 拠点別・曜日×時間帯の稼働ヒートマップを集計する（管理画面専用。日次メールには使わない）。
+ * 情報量が多いため対象は過去数週間分に絞り、日次レポートの集計とは別のクエリ範囲で取得する。
+ */
+export async function collectOccupancyHeatmapData(
+  now: Date = new Date(),
+  weeks: number = HEATMAP_WEEKS,
+  bucketHours: number = HEATMAP_BUCKET_HOURS
+): Promise<OccupancyHeatmapData> {
+  const today = todayJst(now);
+  const fromDate = addDaysJst(today, -weeks * 7);
+
+  const { venues, ownByVenue, bookingsTruncated } = await fetchVenuesAndOwnBookings(
+    fromDate,
+    today
+  );
+
+  const results = await Promise.all(
+    venues.map(async (venue): Promise<VenueHeatmap> => {
+      const own = ownByVenue.get(venue.id) ?? [];
+
+      let calendarBusy: TimeRange[] = [];
+      let calendarOk = true;
+      try {
+        calendarBusy = await getBusyRanges(venue.calendar_id, jstToUtc(fromDate, 0), jstToUtc(today, 0));
+      } catch (e) {
+        console.error(`[occupancy-heatmap] FreeBusy取得失敗（${venue.slug}）: 自社予約のみで集計`, e);
+        calendarOk = false;
+      }
+      const combined = mergeRanges([...own, ...calendarBusy]);
+      const cells = weekdayTimeHeatmap(venue, combined, today, weeks, bucketHours);
+
+      return {
+        slug: venue.slug,
+        name: venue.name,
+        openHour: venue.open_hour,
+        closeHour: venue.close_hour,
+        calendarOk,
+        cells,
+      };
+    })
+  );
+
+  return { today, weeks, bucketHours, venues: results, bookingsTruncated };
 }

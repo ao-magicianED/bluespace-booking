@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jstToUtc } from "./slots";
+import { jstDayOfWeek, jstToUtc } from "./slots";
 import {
   dailyOccupancy,
   daysBetweenJst,
@@ -7,6 +7,7 @@ import {
   mergeRanges,
   occupancyForDates,
   overlapMs,
+  weekdayTimeHeatmap,
 } from "./occupancy";
 import type { TimeRange } from "./types";
 
@@ -170,5 +171,43 @@ describe("judgeAlert", () => {
     const alert = judgeAlert(3, 0);
     expect(alert.level).toBe("high");
     expect(alert.ratioPercent).toBeNull();
+  });
+});
+
+describe("weekdayTimeHeatmap", () => {
+  const venue = { open_hour: 0, close_hour: 24 };
+
+  it("特定の曜日・時間帯の予約がそのセルの稼働率に反映される", () => {
+    const busy = [range("2026-07-09", 10, "2026-07-09", 12)];
+    const cells = weekdayTimeHeatmap(venue, busy, "2026-07-10", 1, 2);
+    const dow = jstDayOfWeek("2026-07-09");
+    const bucketIndex = 5; // 10-12時 = (10 - open_hour) / bucketHours
+    expect(cells[dow][bucketIndex].rate).toBe(1);
+    expect(cells[dow][bucketIndex].busyHours).toBe(2);
+    expect(cells[dow][bucketIndex].sampleDays).toBe(1);
+    expect(cells[dow][0].rate).toBe(0); // 同じ曜日の別バケットは空き
+  });
+
+  it("fromDate当日の予約は集計対象に含めない（今日を含まない過去N週）", () => {
+    const busy = [range("2026-07-10", 10, "2026-07-10", 12)];
+    const cells = weekdayTimeHeatmap(venue, busy, "2026-07-10", 1, 2);
+    const total = cells.flat().reduce((s, c) => s + c.busyHours, 0);
+    expect(total).toBe(0);
+  });
+
+  it("バケット数はopen_hour/close_hourとbucketHoursから決まる", () => {
+    const cells = weekdayTimeHeatmap(venue, [], "2026-07-10", 1, 2);
+    expect(cells).toHaveLength(7);
+    expect(cells[0]).toHaveLength(12); // (24-0)/2
+  });
+
+  it("sampleDaysは各曜日の出現回数（週numWeeks回）と一致する", () => {
+    const cells = weekdayTimeHeatmap(venue, [], "2026-07-10", 4, 2);
+    for (const row of cells) {
+      for (const cell of row) {
+        expect(cell.sampleDays).toBe(4);
+        expect(cell.rate).toBe(0); // 予約なしなら稼働率0（capacityHours>0のためnullにはならない）
+      }
+    }
   });
 });

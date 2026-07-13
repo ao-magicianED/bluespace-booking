@@ -672,6 +672,26 @@ html {
   color: var(--navy-900);
 }
 
+.heatmap-block {
+  margin-bottom: 1.8rem;
+}
+.heatmap-venue-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--navy-900);
+}
+.heatmap-table th,
+.heatmap-table td {
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.heatmap-table td:first-child,
+.heatmap-table th:first-child {
+  text-align: left;
+  white-space: nowrap;
+}
+
 /* Booking page */
 .booking-header h1 {
   margin-bottom: 0.25rem;
