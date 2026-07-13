@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import {
   collectOccupancyData,
+  collectOccupancyHeatmapData,
   PAST_WEEKS,
+  type OccupancyHeatmapData,
   type OccupancyReportData,
 } from "@/lib/occupancy-report";
 import { jstDayOfWeek } from "@/lib/slots";
-import type { AlertLevel, OccupancySummary } from "@/lib/occupancy";
+import type { AlertLevel, HeatmapCell, OccupancySummary } from "@/lib/occupancy";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,24 @@ function hrs(h: number): string {
 }
 function dateLabel(date: string): string {
   return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}(${DOW[jstDayOfWeek(date)]})`;
+}
+
+function bucketLabel(openHour: number, closeHour: number, bucketHours: number, bucketIndex: number): string {
+  const start = openHour + bucketIndex * bucketHours;
+  const end = Math.min(start + bucketHours, closeHour);
+  return `${start}-${end}`;
+}
+
+/** 稼働率0〜1を白(薄)→濃紺(濃)のグラデーション背景色にする。データなし（営業時間外）はグレー */
+function heatBg(cell: HeatmapCell): string {
+  if (cell.rate == null) return "#f3f4f6";
+  const intensity = Math.min(1, Math.max(0, cell.rate));
+  const lightness = 95 - intensity * 55;
+  return `hsl(217, 75%, ${lightness}%)`;
+}
+function heatText(cell: HeatmapCell): string {
+  if (cell.rate == null) return "#9ca3af";
+  return cell.rate > 0.55 ? "#ffffff" : "#1f2937";
 }
 
 /** 管理画面: 拠点別の稼働率・空き状況とアラート */
@@ -54,6 +74,15 @@ export default async function AdminOccupancyPage() {
         </div>
       </>
     );
+  }
+
+  // ヒートマップは補助情報のため、取得に失敗してもメインの稼働率表示は止めずインラインでエラーを出す
+  let heatmapData: OccupancyHeatmapData | null = null;
+  let heatmapError: string | null = null;
+  try {
+    heatmapData = await collectOccupancyHeatmapData(new Date());
+  } catch (e) {
+    heatmapError = e instanceof Error ? e.message : String(e);
   }
 
   if (data.venues.length === 0) {
@@ -213,6 +242,62 @@ export default async function AdminOccupancyPage() {
       <p className="policy">
         進行中の月と年間累計は昨日までの実績で計算しています。稼働率 = 埋まり時間 ÷ 営業時間の総枠。
       </p>
+
+      <h2 className="analytics-h">🔥 曜日×時間帯の稼働ヒートマップ（過去{heatmapData?.weeks ?? "—"}週）</h2>
+      {heatmapError && <div className="notice error">取得エラー: {heatmapError}</div>}
+      {heatmapData && (
+        <>
+          <p className="policy">
+            今日を含まない過去{heatmapData.weeks}週間の平均稼働率です（自社確定予約＋外部サイト予約・手動ブロック込み、
+            {heatmapData.bucketHours}時間刻み）。値下げ・時間帯限定プランの検討材料にどうぞ。
+          </p>
+          {heatmapData.bookingsTruncated && (
+            <div className="notice error">
+              ⚠️ 予約データが取得上限に達したため、数値が実際より少なく出ている可能性があります。
+            </div>
+          )}
+          {heatmapData.venues.map((v) => (
+            <div key={v.slug} className="heatmap-block">
+              <h3 className="heatmap-venue-title">
+                {v.name}
+                {!v.calendarOk && "（⚠️カレンダー未取得・自社予約のみで集計）"}
+              </h3>
+              <div className="ledger-wrap">
+                <table className="ledger-table heatmap-table">
+                  <thead>
+                    <tr>
+                      <th>曜日＼時間帯</th>
+                      {v.cells[0].map((_, b) => (
+                        <th key={b}>{bucketLabel(v.openHour, v.closeHour, heatmapData.bucketHours, b)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DOW.map((label, dow) => (
+                      <tr key={dow}>
+                        <td>{label}</td>
+                        {v.cells[dow].map((cell, b) => (
+                          <td
+                            key={b}
+                            style={{ background: heatBg(cell), color: heatText(cell) }}
+                            title={
+                              cell.rate != null
+                                ? `${hrs(cell.busyHours / cell.sampleDays)}/日 平均・${cell.sampleDays}日分`
+                                : "営業時間外"
+                            }
+                          >
+                            {cell.rate != null ? `${Math.round(cell.rate * 100)}%` : "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
     </>
   );
 }
