@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 増額なしのケース（短縮・時間ずらしで差額0、または減額）→ 即時反映
-  await applyApprovedTimeChange({
+  const applyResult = await applyApprovedTimeChange({
     bookingId,
     venue,
     booking,
@@ -235,6 +235,14 @@ export async function POST(req: NextRequest) {
     reason,
     changeRequestId: (cr as { id: string }).id,
   });
+  if (!applyResult.ok) {
+    const status = applyResult.reason === "slot_conflict" ? 409 : 500;
+    const error =
+      applyResult.reason === "slot_conflict"
+        ? "予約時間の反映に失敗しました（枠が埋まっている可能性があります）。管理者へ通知済みです。"
+        : "予約時間の反映に失敗しました（DB更新エラー）。管理者へ通知済みです。時間をおいて再度お試しください。";
+    return NextResponse.json({ error }, { status });
+  }
 
   return NextResponse.json({
     ok: true,
