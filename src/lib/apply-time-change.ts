@@ -7,11 +7,19 @@ import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
 import type { PriceBreakdown } from "./pricing";
 
+export type ApplyTimeChangeResult =
+  | { ok: true }
+  | { ok: false; reason: "slot_conflict" | "db_error"; message: string };
+
 /**
  * 時間変更を確定反映する（カレンダー更新・DB更新・必要なら返金・通知）。
  * Checkout完了Webhook、管理者の即時反映、自動承認、いずれからも呼ばれる。
  * route.ts は HTTPハンドラ以外をexportできない（Next.jsのApp Router制約）ため、
  * 複数のroute.tsから共有されるこのロジックはlib側に置く。
+ *
+ * 戻り値で予約時刻の更新が実際に反映できたかを呼び出し元へ伝える（returnするだけで
+ * 例外を投げないため、呼び出し元は必ずok/failを確認すること。呼び出し時点で決済/返金の
+ * 金銭処理は既に完了しているため、失敗時でもそれらを取り消すことはしない＝手動対応に委ねる）。
  */
 export async function applyApprovedTimeChange(params: {
   bookingId: string;
@@ -22,7 +30,7 @@ export async function applyApprovedTimeChange(params: {
   amounts: { newAmount: number; extraAmount: number; refundAmount: number };
   reason: string;
   changeRequestId: string;
-}): Promise<void> {
+}): Promise<ApplyTimeChangeResult> {
   const { bookingId, venue, booking, start, end, amounts, reason, changeRequestId } = params;
   const db = getDb();
   const now = new Date();
@@ -103,7 +111,49 @@ export async function applyApprovedTimeChange(params: {
     }
   }
 
-  await db.from("bookings").update(updates).eq("id", bookingId);
+  // 決済/承認は完了済みのため、この更新の失敗は「時間帯が他の予約と重なった」等の
+  // 排他制約違反である可能性が高い（no_double_booking, 0001参照）。検知せず後続の
+  // カレンダー更新・承認確定・完了メールへ進むと、DB上は変更されていないのに
+  // お客様には「変更完了」と案内してしまう事故になるため、必ず結果を確認する。
+  // CAS条件（呼び出し元は必ず booking_status==='confirmed' を確認した直後の
+  // スナップショットを渡す前提。start_at/end_at/adjusted_totalが読んだ時点のままで
+  // あることも合わせて確認し、呼び出し元の空き確認から反映までの間に予約自体
+  // （時刻・並行して行われた料金調整等）が変わっていた場合に、古いスナップショットに
+  // 基づく金額・時刻で無条件に上書きしないようにする。
+  // payment_statusはCASに含めない: このすぐ上のincrement_refunded_amount RPCが
+  // このUPDATEより先にpayment_statusを書き換えるため、含めると返金を伴う変更が
+  // （このUPDATE自体が原因で）必ず0件になってしまう。
+  let bookingUpdateQuery = db
+    .from("bookings")
+    .update(updates)
+    .eq("id", bookingId)
+    .eq("booking_status", "confirmed")
+    .eq("start_at", booking.start_at)
+    .eq("end_at", booking.end_at);
+  bookingUpdateQuery =
+    booking.adjusted_total === null || booking.adjusted_total === undefined
+      ? bookingUpdateQuery.is("adjusted_total", null)
+      : bookingUpdateQuery.eq("adjusted_total", booking.adjusted_total);
+  const { data: updatedRows, error: updateErr } = await bookingUpdateQuery.select("id");
+  if (updateErr || !updatedRows || updatedRows.length === 0) {
+    // 排他制約違反(exclusion_violation=23P01)は枠の競合、それ以外のDBエラーは
+    // インフラ障害寄りとして区別する（呼び出し元での応答コード分岐に使う）
+    const isExclusionViolation = updateErr?.code === "23P01";
+    const reason: "slot_conflict" | "db_error" =
+      !updateErr || isExclusionViolation ? "slot_conflict" : "db_error";
+    const message = String(
+      updateErr?.message ?? "更新0件（他の予約と重複しているか、予約が別経路で変更済みの可能性）"
+    );
+    const alertTitle =
+      reason === "slot_conflict"
+        ? "🚨 時間変更の反映に失敗（枠が埋まっている可能性・要手動対応）"
+        : "🚨 時間変更の反映に失敗（DB更新エラー・要手動対応）";
+    await sendAdminAlert(
+      alertTitle,
+      `予約ID: ${bookingId}\n決済/承認は完了していますが、予約時間の更新に失敗しました。カレンダー更新・完了メールは送信していません。手動で確認してください。\n分類: ${reason}\nエラー: ${message}`
+    );
+    return { ok: false, reason, message };
+  }
 
   // Googleカレンダー更新（新しい金額も反映）
   if (booking.calendar_event_id && venue.calendar_id) {
@@ -133,15 +183,24 @@ export async function applyApprovedTimeChange(params: {
     }
   }
 
-  // change_request 確定
-  await db
+  // change_request 確定（予約時刻の更新自体は既に成功しているため、この失敗は
+  // 監査ログの記録漏れに留まる。ブロックはせずアラートのみで手動対応に委ねる）
+  const { data: crUpdatedRows, error: crUpdateErr } = await db
     .from("booking_change_requests")
     .update({
       status: "approved",
       decided_at: now.toISOString(),
       stripe_refund_id: refundId,
     })
-    .eq("id", changeRequestId);
+    .eq("id", changeRequestId)
+    .select("id");
+  if (crUpdateErr || !crUpdatedRows || crUpdatedRows.length === 0) {
+    console.error("[change-time] change_request確定更新失敗:", crUpdateErr ?? "対象0件");
+    await sendAdminAlert(
+      "⚠️ 変更申請の確定記録に失敗（要確認・予約自体は変更済み）",
+      `予約ID: ${bookingId}\n申請ID: ${changeRequestId}\n予約時間の変更は反映済みですが、申請テーブルの確定記録に失敗しました。\nエラー: ${String(crUpdateErr?.message ?? "対象0件")}`
+    );
+  }
 
   // メール通知
   const oldPeriod = formatBookingPeriod(booking);
@@ -182,4 +241,6 @@ export async function applyApprovedTimeChange(params: {
       `理由: ${reason}`,
     ].filter(Boolean).join("\n")
   );
+
+  return { ok: true };
 }

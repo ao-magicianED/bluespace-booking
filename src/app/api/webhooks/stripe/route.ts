@@ -808,7 +808,11 @@ async function handleChangeRequestCompleted(session: Stripe.Checkout.Session): P
   }
 
   try {
-    await applyApprovedTimeChange({
+    // 失敗時（枠が埋まっている等）はapplyApprovedTimeChange内で既に管理者アラート
+    // 送信済み。戻り値をここで明示的に受け取るのみで、Webhookとしては200を返す
+    // （Stripeの再送はcrがapproved済みのため無効化しても意味がなく、再送させる
+    // 必要はない＝手動対応に委ねる）。
+    const applyResult = await applyApprovedTimeChange({
       bookingId,
       venue,
       booking,
@@ -822,6 +826,7 @@ async function handleChangeRequestCompleted(session: Stripe.Checkout.Session): P
       reason: cr.reason || "予約延長（決済完了）",
       changeRequestId,
     });
+    if (!applyResult.ok) return;
   } catch (e) {
     await sendAdminAlert(
       "🚨 予約変更の適用失敗（手動対応必要）",

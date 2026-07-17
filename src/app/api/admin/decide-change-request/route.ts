@@ -54,6 +54,14 @@ export async function POST(req: NextRequest) {
     .eq("id", cr.booking_id)
     .maybeSingle<Booking>();
   if (!booking) return NextResponse.json({ error: "予約が見つかりません" }, { status: 404 });
+  // 却下はいつでも可能にする（予約がキャンセル済みでも、放置されたpending申請を
+  // 却下できないと管理画面から消せなくなるため）。時間反映を伴う承認のみ制限する。
+  if (action === "approve" && booking.booking_status !== "confirmed") {
+    return NextResponse.json(
+      { error: `確定済みの予約のみ承認できます（現在: ${booking.booking_status}）` },
+      { status: 400 }
+    );
+  }
   const { data: venue } = await db
     .from("venues")
     .select("*")
@@ -135,7 +143,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "この申請は既に処理されています" }, { status: 409 });
   }
 
-  await applyApprovedTimeChange({
+  const applyResult = await applyApprovedTimeChange({
     bookingId: cr.booking_id,
     venue,
     booking,
@@ -149,6 +157,17 @@ export async function POST(req: NextRequest) {
     reason: cr.reason || "お客様申請の時間変更",
     changeRequestId,
   });
+  if (!applyResult.ok) {
+    // 承認自体は既に確定している（二重クリック対策のCASを通過済み）ため、ここで
+    // 申請をrejectedへ戻すことはしない。管理者アラートは既にapplyApprovedTimeChange内で
+    // 送信済みなので、ここではAPIレスポンスで手動対応が必要なことだけ伝える。
+    const status = applyResult.reason === "slot_conflict" ? 409 : 500;
+    const error =
+      applyResult.reason === "slot_conflict"
+        ? "承認は記録されましたが、予約時間の反映に失敗しました（枠が埋まっている可能性）。管理者へ通知済みです。手動で確認してください。"
+        : "承認は記録されましたが、予約時間の反映に失敗しました（DB更新エラー）。管理者へ通知済みです。手動で確認してください。";
+    return NextResponse.json({ error }, { status });
+  }
 
   return NextResponse.json({
     ok: true,
