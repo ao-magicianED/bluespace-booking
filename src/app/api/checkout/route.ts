@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/supabase";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { getVenueBySlug } from "@/lib/availability";
 import { getBusyRanges } from "@/lib/google-calendar";
 import { buildQuote, QuoteError } from "@/lib/quote";
@@ -327,8 +327,8 @@ export async function POST(req: NextRequest) {
           },
         ],
         customer_email: email,
-        metadata: { booking_id: bookingId },
-        payment_intent_data: { metadata: { booking_id: bookingId } },
+        metadata: { booking_id: bookingId, app: STRIPE_APP_TAG },
+        payment_intent_data: { metadata: { booking_id: bookingId, app: STRIPE_APP_TAG } },
         // 仮押さえと同じ30分で失効させる（Stripeの最短は30分）
         expires_at: Math.floor(now.getTime() / 1000) + PENDING_HOLD_MINUTES * 60,
         success_url: `${site}/thanks?session_id={CHECKOUT_SESSION_ID}`,
