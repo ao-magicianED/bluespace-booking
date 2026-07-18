@@ -28,7 +28,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const content = getVenueContent(slug);
-  if (!content) return {};
+  // コンテンツ定義が無いslugでも canonical だけは自己参照にしておく
+  // （返さないと親layoutのmetadataを継承してしまうため）
+  if (!content) return { alternates: { canonical: `${SITE}/${slug}` } };
   const title = `${content.name}｜${content.station.split("（")[0]}のレンタルスペース【公式予約】`;
   const description = `${content.catchCopy}。${content.capacityShort}。公式サイト予約なら仲介手数料なしの最安価格。空き状況を見てそのままオンライン決済で予約完了。`;
   return {
