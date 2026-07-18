@@ -1,4 +1,4 @@
-import { getStripe } from "./stripe";
+import { getStripe, STRIPE_APP_TAG } from "./stripe";
 
 /**
  * 請求書払い（法人・銀行振込）の設計:
@@ -49,7 +49,7 @@ export async function createAndSendInvoice(params: {
   const customer = await stripe.customers.create({
     email: params.email,
     name: displayName,
-    metadata: { booking_id: params.bookingId },
+    metadata: { booking_id: params.bookingId, app: STRIPE_APP_TAG },
   });
 
   await stripe.invoiceItems.create({
@@ -64,7 +64,7 @@ export async function createAndSendInvoice(params: {
     collection_method: "send_invoice",
     due_date: Math.floor(params.dueAt.getTime() / 1000),
     currency: "jpy",
-    metadata: { booking_id: params.bookingId },
+    metadata: { booking_id: params.bookingId, app: STRIPE_APP_TAG },
     payment_settings: {
       payment_method_types: ["customer_balance"],
       payment_method_options: {
