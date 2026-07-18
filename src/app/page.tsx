@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { getDb, isDbConfigured } from "@/lib/supabase";
@@ -8,6 +9,11 @@ import type { Venue } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
+
+// トップページの canonical（ルートlayoutから移設。他ページに継承させないため）
+export const metadata: Metadata = {
+  alternates: { canonical: SITE },
+};
 
 const organizationJsonLd = {
   "@context": "https://schema.org",

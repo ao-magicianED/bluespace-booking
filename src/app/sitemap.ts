@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getDb, isDbConfigured } from "@/lib/supabase";
+import { venueContents } from "@/content/venues";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 
@@ -26,25 +27,41 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/legal/tokushoho`, lastModified: "2026-05-01", changeFrequency: "yearly", priority: 0.2 },
   ];
 
+  // 拠点ページのslug一覧。DBが正なので原則DBから取るが、
+  // 取得に失敗したときは静的コンテンツ定義（src/content/venues.ts）にフォールバックする。
+  // ※以前は存在しない updated_at カラムを select していたため PostgREST がエラーを返し、
+  //   supabase-js は例外を投げない（{data:null,error}を返す）ので try/catch にも掛からず、
+  //   拠点ページが1件もサイトマップに載らないサイレント障害になっていた。
+  let venueSlugs: { slug: string; lastModified: string }[] = [];
+
   if (isDbConfigured()) {
     try {
-      const { data: venues } = await getDb()
+      const { data: venues, error } = await getDb()
         .from("venues")
-        .select("slug, updated_at")
+        .select("slug, created_at")
         .eq("active", true);
-      for (const v of venues ?? []) {
-        const mod = v.updated_at ?? latestVenueDate;
-        entries.push({
-          url: `${SITE}/${v.slug}`,
-          lastModified: mod,
-          changeFrequency: "daily",
-          priority: 0.9,
-        });
-        if (mod > latestVenueDate) latestVenueDate = mod;
-      }
+      if (error) throw error;
+      venueSlugs = (venues ?? []).map((v) => ({
+        slug: v.slug as string,
+        lastModified: (v.created_at as string | null)?.slice(0, 10) ?? latestVenueDate,
+      }));
     } catch (e) {
-      console.error("[sitemap]", e);
+      console.error("[sitemap] venues取得に失敗。静的定義にフォールバックします", e);
     }
+  }
+
+  if (venueSlugs.length === 0) {
+    venueSlugs = Object.keys(venueContents).map((slug) => ({ slug, lastModified: latestVenueDate }));
+  }
+
+  for (const v of venueSlugs) {
+    entries.push({
+      url: `${SITE}/${v.slug}`,
+      lastModified: v.lastModified,
+      changeFrequency: "daily",
+      priority: 0.9,
+    });
+    if (v.lastModified > latestVenueDate) latestVenueDate = v.lastModified;
   }
 
   entries.unshift({

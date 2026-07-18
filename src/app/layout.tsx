@@ -27,7 +27,10 @@ export const metadata: Metadata = {
   },
   description:
     "ブルーステージ合同会社が運営するレンタルスペース「ブルースペース」の公式予約サイト。仲介手数料なしの最安価格、空き状況を見てそのままクレジットカードで予約完了。",
-  alternates: { canonical: SITE },
+  // canonical はここに置かない。Next.js の metadata は親から継承されるため、
+  // ルートに固定値を置くと自前で上書きしていない全ページが「トップページが正規URL」と
+  // 申告してしまい、Search Console で「代替ページ（適切なcanonicalタグあり）」になる。
+  // トップページの canonical は src/app/page.tsx 側で自己参照として指定する。
   openGraph: {
     siteName: "ブルースペース公式予約",
     locale: "ja_JP",
