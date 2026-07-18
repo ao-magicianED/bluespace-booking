@@ -9,7 +9,7 @@ import {
   calcChangeAmounts,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { siteUrl } from "@/lib/site-url";
 import { applyApprovedTimeChange } from "@/lib/apply-time-change";
 import type { Booking, Venue } from "@/lib/types";
@@ -151,7 +151,9 @@ export async function POST(req: NextRequest) {
         metadata: {
           change_request_id: (cr as { id: string }).id,
           booking_id: bookingId,
+          app: STRIPE_APP_TAG,
         },
+        payment_intent_data: { metadata: { app: STRIPE_APP_TAG } },
         customer_email: booking.customer_email,
         success_url: `${baseUrl}/my/${bookingId}?changed=1`,
         cancel_url: `${baseUrl}/my/${bookingId}`,

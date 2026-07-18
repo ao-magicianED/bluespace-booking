@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { getDb } from "@/lib/supabase";
 import { runConfirmationSideEffects, formatBookingPeriod } from "@/lib/confirm";
 import { sendMail, sendAdminAlert } from "@/lib/mail";
@@ -118,6 +118,12 @@ async function handleCompleted(session: Stripe.Checkout.Session): Promise<void> 
   const db = getDb();
   const bookingId = session.metadata?.booking_id;
   if (!bookingId) {
+    if (session.metadata?.app !== STRIPE_APP_TAG) {
+      // 同一Stripeアカウントを共有する他サービス（あおサロン等）の決済。
+      // このシステムが作成したCheckout Sessionではないため何もしない。
+      // 新しいサービスが同じStripeアカウントに追加されても、appタグを持たない限り自動的に無視される
+      return;
+    }
     await sendAdminAlert(
       "⚠️ booking_idのない決済を検知",
       `Checkoutセッション ${session.id} にbooking_idがありません。Stripeダッシュボードで確認してください。`
@@ -446,6 +452,18 @@ async function handleRefundFailed(refund: Stripe.Refund): Promise<void> {
   }
 
   if (!booking) {
+    // このシステムの予約に紐づかない。同一Stripeアカウントを共有する他サービス（あおサロン等）の
+    // 返金失敗である可能性が高いため、PaymentIntentのappタグを見て通知の要否を判断する。
+    // 新しいサービスが同じStripeアカウントに追加されても、appタグを持たない限り自動的に無視される
+    try {
+      const pi = await getStripe().paymentIntents.retrieve(piId);
+      if (pi.metadata?.app !== STRIPE_APP_TAG) {
+        return;
+      }
+    } catch (e) {
+      // 判定できない場合は原因調査できるよう安全側に倒してアラートを出す
+      console.error("[webhook] PaymentIntent取得失敗（返金失敗の予約特定用）:", e);
+    }
     await sendAdminAlert(
       "🚨 返金失敗（予約が特定できません・手動対応必要）",
       `Refund ${refund.id}（PaymentIntent: ${piId}）が失敗しましたが、対応する予約が見つかりません。Stripeダッシュボードで手動対応してください。\n失敗理由: ${refund.failure_reason ?? "不明"}\n金額: ¥${refund.amount.toLocaleString()}`

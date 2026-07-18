@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth-server";
 import { getDb } from "@/lib/supabase";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
 import { formatBookingPeriod } from "@/lib/confirm";
 import {
@@ -169,7 +169,9 @@ export async function POST(req: NextRequest) {
           metadata: {
             change_request_id: changeRequestId,
             booking_id: bookingId,
+            app: STRIPE_APP_TAG,
           },
+          payment_intent_data: { metadata: { app: STRIPE_APP_TAG } },
           customer_email: booking.customer_email,
           success_url: `${baseUrl}/my/${bookingId}?changed=1`,
           cancel_url: `${baseUrl}/my/${bookingId}`,
