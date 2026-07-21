@@ -1288,7 +1288,9 @@ html {
 }
 .admin-form-panel input[type="number"],
 .admin-form-panel input[type="text"],
+.admin-form-panel input[type="date"],
 .admin-form-panel input[type="datetime-local"],
+.admin-form-panel select,
 .admin-form-panel textarea {
   width: 100%;
   border: 1px solid var(--border);
