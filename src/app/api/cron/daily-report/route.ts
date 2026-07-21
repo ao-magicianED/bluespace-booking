@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendAdminAlert } from "@/lib/mail";
 import { buildOccupancyReport } from "@/lib/occupancy-report";
 import { saveDailySnapshots } from "@/lib/occupancy-snapshots";
+import { collectPaceSnapshots, savePaceSnapshots } from "@/lib/pace-snapshots";
 
 export const dynamic = "force-dynamic";
 
@@ -31,16 +32,31 @@ export async function GET(req: NextRequest) {
       snapshotSaveFailed = true;
       console.error("[cron/daily-report] スナップショット保存に失敗:", e);
     }
+    // 予約カーブ（価格施策の効果測定用）の記録も同様にベストエフォート
+    let paceSnapshotSaveFailed = false;
+    try {
+      await savePaceSnapshots(await collectPaceSnapshots(new Date()));
+    } catch (e) {
+      paceSnapshotSaveFailed = true;
+      console.error("[cron/daily-report] 予約カーブスナップショット保存に失敗:", e);
+    }
     const delivered = await sendAdminAlert(subject, text, html);
     if (!delivered.discord && !delivered.email) {
       // レポートは生成できたが誰にも届いていない＝ジョブとしては失敗（Vercelのログで気づけるようにする）
       console.error("[cron/daily-report] 全チャネルで配信失敗（Discord・メールとも未達）");
       return NextResponse.json(
-        { error: "delivery_failed", alerts, calendarErrors, snapshotSaveFailed },
+        { error: "delivery_failed", alerts, calendarErrors, snapshotSaveFailed, paceSnapshotSaveFailed },
         { status: 500 }
       );
     }
-    return NextResponse.json({ ok: true, delivered, alerts, calendarErrors, snapshotSaveFailed });
+    return NextResponse.json({
+      ok: true,
+      delivered,
+      alerts,
+      calendarErrors,
+      snapshotSaveFailed,
+      paceSnapshotSaveFailed,
+    });
   } catch (e) {
     console.error("[cron/daily-report] レポート生成に失敗:", e);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });

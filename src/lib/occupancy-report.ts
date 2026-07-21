@@ -19,9 +19,9 @@ import type { TimeRange, Venue } from "./types";
 
 /**
  * アクティブ拠点一覧と、指定期間（下限含む・上限含まない）に重なる自社確定予約を取得する。
- * cronの日次レポートと管理画面のヒートマップの両方から使う共通ヘルパー。
+ * cronの日次レポート・管理画面のヒートマップ・予約カーブスナップショット（pace-snapshots.ts）から使う共通ヘルパー。
  */
-async function fetchVenuesAndOwnBookings(
+export async function fetchVenuesAndOwnBookings(
   lowerDateInclusive: string,
   upperDateExclusive: string
 ): Promise<{ venues: Venue[]; ownByVenue: Map<string, TimeRange[]>; bookingsTruncated: boolean }> {
