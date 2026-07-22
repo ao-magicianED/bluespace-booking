@@ -4,7 +4,8 @@ import { recordPriceActionResult, type PriceActionStatus } from "@/lib/price-act
 
 export const dynamic = "force-dynamic";
 
-const STATUSES: PriceActionStatus[] = ["draft", "applied", "reverted", "expired"];
+// 結果記録APIで受け付ける状態。draft（指示のみ）への差し戻しは想定運用にないため受け付けない
+const STATUSES: PriceActionStatus[] = ["applied", "reverted", "expired"];
 
 /**
  * PATCH /api/admin/price-actions/[id] — スタッフが実際に設定した結果を記録する。
@@ -38,6 +39,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await recordPriceActionResult(id, { status, appliedPrice, appliedBy, resultNote });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    const message = e instanceof Error ? e.message : String(e);
+    const notFound = message.includes("見つかりません");
+    return NextResponse.json({ error: message }, { status: notFound ? 404 : 500 });
   }
 }

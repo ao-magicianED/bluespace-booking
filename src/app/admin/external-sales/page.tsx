@@ -31,10 +31,12 @@ async function fetchConfirmedSummaryRows(): Promise<{ channel: string; venue_id:
   const rows: { channel: string; venue_id: string | null; gross_amount: number }[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
     const from = page * PAGE;
+    // ORDER BYなしのページングは順序が保証されず、ページ間で行の取りこぼし・二重取得が起きるため必ず並べる
     const { data, error } = await db
       .from("external_bookings")
       .select("channel, venue_id, gross_amount")
       .eq("status", "confirmed")
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`外部予約の集計取得エラー: ${error.message}`);
     rows.push(...(data ?? []));

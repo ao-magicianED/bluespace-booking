@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import iconv from "iconv-lite";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
-import { parseExternalCsv, type ExternalChannel } from "@/lib/external-import";
+import { dedupeByBookingId, parseExternalCsv, type ExternalChannel } from "@/lib/external-import";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +40,13 @@ export async function POST(req: NextRequest) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "CSVファイルを選択してください" }, { status: 400 });
   }
-  if (file.size > 20 * 1024 * 1024) {
-    return NextResponse.json({ error: "ファイルサイズが大きすぎます（20MBまで）" }, { status: 400 });
+  // Vercelのリクエストボディ実効上限は4.5MB。超えるとこのコードに到達する前に落ちるため、
+  // 分割アップロードの案内込みでこちらの上限を先に効かせる
+  if (file.size > 4 * 1024 * 1024) {
+    return NextResponse.json(
+      { error: "ファイルサイズが大きすぎます（4MBまで）。期間を区切ってエクスポートして分割アップロードしてください" },
+      { status: 400 }
+    );
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
@@ -56,6 +61,10 @@ export async function POST(req: NextRequest) {
   if (records.length === 0) {
     return NextResponse.json({ error: "取り込める行がありませんでした" }, { status: 400 });
   }
+  // 実CSVには同一予約IDの重複行がある（SM・UPNOWで確認済み）。同一バッチ内の重複キーは
+  // PostgreSQLのupsertが拒否するため、必ず除去してから保存する
+  const deduped = dedupeByBookingId(records);
+  records = deduped.records;
 
   const db = getDb();
   const { data: venues, error: venueErr } = await db.from("venues").select("id, slug");
@@ -115,20 +124,25 @@ export async function POST(req: NextRequest) {
   const insertedCount = idsInBatch.filter((id) => !existingIds.has(id)).length;
   const updatedCount = idsInBatch.length - insertedCount;
 
-  await db.from("external_import_batches").insert({
+  // 取込履歴は分析の補助情報のため、保存失敗しても取込自体は成功として返す（ログには残す）
+  const { error: batchErr } = await db.from("external_import_batches").insert({
     channel,
     file_name: file.name.slice(0, 200),
     row_count: rows.length,
     inserted_count: insertedCount,
     updated_count: updatedCount,
-    unmatched_venue_count: unmatchedNames.size > 0 ? rows.filter((r) => !r.venue_id).length : 0,
+    unmatched_venue_count: rows.filter((r) => !r.venue_id).length,
   });
+  if (batchErr) {
+    console.error("[external-import] 取込履歴の保存に失敗:", batchErr.message);
+  }
 
   return NextResponse.json({
     ok: true,
     rowCount: rows.length,
     insertedCount,
     updatedCount,
+    duplicateCount: deduped.duplicateCount,
     unmatchedVenueNames: Array.from(unmatchedNames).slice(0, 20),
   });
 }
