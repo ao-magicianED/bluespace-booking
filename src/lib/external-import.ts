@@ -50,7 +50,10 @@ export function parseCsv(text: string): string[][] {
         field += c;
       }
     } else if (c === '"') {
-      inQuotes = true;
+      // 引用符はフィールド先頭でのみ「引用開始」とみなす。フィールド途中の裸の引用符を
+      // 引用開始と解釈すると、以降のカンマ・改行がすべて1フィールドに吸われ行が静かに消えるため
+      if (field === "") inQuotes = true;
+      else field += c;
     } else if (c === ",") {
       row.push(field);
       field = "";
@@ -98,18 +101,24 @@ function parseDateStr(s: string | undefined): string | null {
   return `${m[1]}-${pad2(Number(m[2]))}-${pad2(Number(m[3]))}`;
 }
 
-/** "10:28" 等 → 小数時（10.466...）。省略時は0時 */
-function timeStrToHour(s: string | undefined): number {
-  if (!s) return 0;
+/** "10:28" 等 → 小数時（10.466...）。省略・不正・24時超えは null（呼び出し側で行ごと時刻なし扱い） */
+function timeStrToHour(s: string | undefined): number | null {
+  if (!s) return null;
   const m = s.trim().match(/^(\d{1,2}):(\d{2})/);
-  if (!m) return 0;
-  return Number(m[1]) + Number(m[2]) / 60;
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  // "24:00"はJSエンジンによってDate解釈が揺れるため24時ちょうども含めて拒否し、時刻なし扱いにする
+  if (h > 23 || min > 59) return null;
+  return h + min / 60;
 }
 
-/** JSTの日付+時刻文字列からUTCのISO文字列を作る */
+/** JSTの日付+時刻文字列からUTCのISO文字列を作る。時刻が不正な場合はnull（RangeErrorで取込全体を落とさない） */
 function toUtcIso(dateStr: string | null, timeStr: string | undefined): string | null {
   if (!dateStr) return null;
-  return jstToUtc(dateStr, timeStrToHour(timeStr)).toISOString();
+  const hour = timeStrToHour(timeStr);
+  if (hour == null) return null;
+  return jstToUtc(dateStr, hour).toISOString();
 }
 
 /** "2026-06-30 10:28" のような日時一体型文字列を分解してUTC ISOに変換 */
@@ -210,6 +219,7 @@ export function parseSpaceMarketCsv(text: string): ExternalBookingRecord[] {
   const rows = parseCsv(stripBom(text));
   if (rows.length < 2) return [];
   const header = rows[1];
+  const iId = headerIndex(header, "予約ID", "スペースマーケット");
   const iReq = headerIndex(header, "予約リクエスト日", "スペースマーケット");
   const iUse = headerIndex(header, "実施日", "スペースマーケット");
   const iGross = headerIndex(header, "成約金額", "スペースマーケット");
@@ -222,7 +232,7 @@ export function parseSpaceMarketCsv(text: string): ExternalBookingRecord[] {
   const out: ExternalBookingRecord[] = [];
   for (let r = 2; r < rows.length; r++) {
     const row = rows[r];
-    const id = row[0]?.trim();
+    const id = row[iId]?.trim();
     if (!id || row.length < 10) continue; // ID空欄・列不足のゴミ行をスキップ（CLのみ手入力行など）
     const stRaw = row[iSt] ?? "";
     const status: ExternalBookingStatus = stRaw === "成約" ? "confirmed" : stRaw === "CL" ? "cancelled" : "other";
@@ -309,4 +319,20 @@ export function parseExternalCsv(channel: ExternalChannel, text: string): Extern
     case "upnow":
       return parseUpnowCsv(text);
   }
+}
+
+/**
+ * 同一予約IDの重複行を除去する（実CSVにスペースマーケット・UPNOWとも重複IDの行が存在する）。
+ * PostgreSQLは同一バッチ内で同じキーを2回upsertできない（"cannot affect row a second time"）ため、
+ * DBへ渡す前に必ずこれを通す。ファイル内で後に出てくる行（＝追記型シートでは新しい記録）を採用する。
+ */
+export function dedupeByBookingId(records: ExternalBookingRecord[]): {
+  records: ExternalBookingRecord[];
+  duplicateCount: number;
+} {
+  const byId = new Map<string, ExternalBookingRecord>();
+  for (const r of records) {
+    byId.set(r.externalBookingId, r);
+  }
+  return { records: Array.from(byId.values()), duplicateCount: records.length - byId.size };
 }

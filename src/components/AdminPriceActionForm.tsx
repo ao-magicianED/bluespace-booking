@@ -141,9 +141,26 @@ export default function AdminPriceActionForm({ venues }: { venues: VenueOption[]
         />
       </label>
       <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-        <input type="checkbox" checked={isHoldout} onChange={(e) => setIsHoldout(e.target.checked)} disabled={busy} />
+        <input
+          type="checkbox"
+          checked={isHoldout}
+          onChange={(e) => {
+            setIsHoldout(e.target.checked);
+            // 保護枠=「現在の掲載価格のまま」の指示なので、掲載価格が入力済みならそれを自動転記する
+            // （0円のまま保存→効果測定データが汚れる事故を防ぐ）
+            if (e.target.checked && previousPrice !== "") {
+              setPlannedPrice(Number(previousPrice));
+            }
+          }}
+          disabled={busy}
+        />
         比較用の保護枠（値下げせず定価のまま。効果測定の対照群にする）
       </label>
+      {isHoldout && (
+        <p className="policy" style={{ margin: "0.2rem 0 0" }}>
+          保護枠の「指示する特価」には現在の掲載価格（定価）をそのまま入力してください。
+        </p>
+      )}
       <label>
         理由・根拠（曜日×時間帯の稼働率など）
         <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} maxLength={500} />

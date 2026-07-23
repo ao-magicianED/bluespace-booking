@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  dedupeByBookingId,
   matchVenueSlug,
   parseCsv,
   parseInstabaseCsv,
   parseSpaceMarketCsv,
   parseUpnowCsv,
+  type ExternalBookingRecord,
 } from "./external-import";
 
 describe("parseCsv", () => {
@@ -14,6 +16,39 @@ describe("parseCsv", () => {
       ["a", "b,b", 'c"c'],
       ["1", "line1\nline2", "3"],
     ]);
+  });
+
+  it("フィールド途中の裸の引用符をリテラルとして扱う（以降の行が吸われない）", () => {
+    const text = 'a,5"x6室,c\nd,e,f\n';
+    expect(parseCsv(text)).toEqual([
+      ["a", '5"x6室', "c"],
+      ["d", "e", "f"],
+    ]);
+  });
+});
+
+describe("dedupeByBookingId", () => {
+  it("同一予約IDはファイル内で後に出てくる行を採用する", () => {
+    const rec = (id: string, gross: number): ExternalBookingRecord => ({
+      channel: "spacemarket",
+      externalBookingId: id,
+      venueSlug: "kanda",
+      rawVenueName: "神田",
+      status: "confirmed",
+      bookedAt: null,
+      startAt: null,
+      endAt: null,
+      hours: null,
+      grossAmount: gross,
+      netAmount: null,
+      couponAmount: 0,
+      planName: null,
+      purpose: null,
+    });
+    const { records, duplicateCount } = dedupeByBookingId([rec("1", 100), rec("2", 200), rec("1", 300)]);
+    expect(duplicateCount).toBe(1);
+    expect(records).toHaveLength(2);
+    expect(records.find((r) => r.externalBookingId === "1")?.grossAmount).toBe(300);
   });
 });
 
@@ -100,6 +135,16 @@ describe("parseSpaceMarketCsv", () => {
 describe("parseUpnowCsv", () => {
   const header =
     "予約ID,予約リクエスト日,予約成立日,利用開始日,開始時間,利用終了日,終了時間,利用時間,予約金額,クーポン,内訳）スペース料,内訳）オプション料,内訳）維持管理費,内訳）消費税,ステータス,振込予定日,支払い方法,スペース名,プラン名,オプション,利用者種別,会社名,ゲスト名,利用目的,利用目的詳細,スペースID,クーポンコード,クーポン名";
+
+  it("不正な時刻（25:00等）でも例外にせず、時刻なしとして取り込む", () => {
+    const row =
+      "111,2026/7/11,2026/7/11,2026/8/10,25:00,2026/8/10,26:00,1時間,1000,0,1000,0,0,0,予約確定,2026年9月末,クレジットカード,ブルースペース神田,基本プラン,なし,個人,,テスト,会議・商談,,1501,,";
+    const [rec] = parseUpnowCsv(`${header}\n${row}\n`);
+    expect(rec.startAt).toBeNull();
+    expect(rec.endAt).toBeNull();
+    expect(rec.hours).toBeNull();
+    expect(rec.status).toBe("confirmed");
+  });
 
   it("開始日時・終了日時からhoursを算出し、拠点・クーポンを正規化する", () => {
     const row =

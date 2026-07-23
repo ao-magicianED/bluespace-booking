@@ -25,6 +25,34 @@ export function isHolidayDate(dateStr: string, holidaySet: Set<string>): boolean
   return dow === 0 || dow === 6 || holidaySet.has(dateStr);
 }
 
+/**
+ * getHolidaySetの厳格版（価格ガードレール用）。
+ * 通常版はDB障害時に空Setを返すfail-open（料金表示を止めないため）だが、
+ * 「土日祝に値下げ指示を出さない」ガードレールでは空Set=祝日なし扱いとなり安全方向が逆になる。
+ * こちらは (1)クエリ失敗でthrow (2)対象年の祝日データがテーブルに1件もなければthrow（未投入年の素通り防止）。
+ */
+export async function getHolidaySetStrict(dates: string[]): Promise<Set<string>> {
+  if (dates.length === 0) return new Set();
+  const db = getDb();
+  const { data, error } = await db.from("jp_holidays").select("date").in("date", dates);
+  if (error) throw new Error(`祝日データの取得に失敗しました: ${error.message}`);
+
+  const years = Array.from(new Set(dates.map((d) => d.slice(0, 4))));
+  for (const year of years) {
+    const { data: probe, error: probeErr } = await db
+      .from("jp_holidays")
+      .select("date")
+      .gte("date", `${year}-01-01`)
+      .lte("date", `${year}-12-31`)
+      .limit(1);
+    if (probeErr) throw new Error(`祝日データの取得に失敗しました: ${probeErr.message}`);
+    if (!probe || probe.length === 0) {
+      throw new Error(`${year}年の祝日データが未登録です（cron/maintenanceの祝日更新を確認してください）`);
+    }
+  }
+  return new Set((data ?? []).map((r) => r.date as string));
+}
+
 /** holidays-jp APIから祝日を取得してDBへupsert（Cronから呼ぶ・ベストエフォート） */
 export async function refreshHolidays(): Promise<number> {
   const res = await fetch("https://holidays-jp.github.io/api/v1/date.json");

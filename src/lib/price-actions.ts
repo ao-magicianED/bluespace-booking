@@ -1,6 +1,6 @@
 import { getDb } from "./supabase";
-import { getHolidaySet, isHolidayDate } from "./holidays";
-import { jstToUtc } from "./slots";
+import { getHolidaySetStrict, isHolidayDate } from "./holidays";
+import { isValidDateStr } from "./slots";
 
 /**
  * 価格施策の台帳（STEP 0）。
@@ -81,13 +81,23 @@ export type ValidationResult = {
   warnings: string[];
 };
 
+/** 0.5刻みの有効な時刻値かチェック */
+function isHalfHourGrid(v: number): boolean {
+  return Number.isFinite(v) && (v * 2) % 1 === 0;
+}
+
 /**
- * 価格施策のガードレール検証。
+ * 価格施策のガードレール検証（祝日Setを引数に取る純粋部分。単体テストはこちらを対象にする）。
  * - 土日祝は対象外（値下げは平日のみ、というオーナー方針を強制）
- * - 拠点別の下限価格を下回れない
- * - is_holdout=true（比較用に価格を据え置く指示）は下限チェックの対象外（値下げしない指示のため）
+ * - 拠点別の下限価格を下回れない。保護枠（is_holdout=true）も対象:
+ *   保護枠の正しい入力は「現在の掲載価格（定価）」で、全拠点の定価は下限以上のため正当な入力は必ず通る。
+ *   下限未満を許すと、効果測定の対照群データに0円などのゴミが混ざる
+ * - 時刻は0〜24の0.5刻み（予約システムのスロット粒度と一致させる）
  */
-export async function validatePriceAction(input: PriceActionInput): Promise<ValidationResult> {
+export function validatePriceActionWithHolidays(
+  input: PriceActionInput,
+  holidaySet: Set<string>
+): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -95,22 +105,35 @@ export async function validatePriceAction(input: PriceActionInput): Promise<Vali
     errors.push("拠点が価格施策の対象外です（設定を確認してください）");
     return { blocked: true, errors, warnings };
   }
+  if (!isValidDateStr(input.targetDate)) {
+    errors.push("対象日の形式が正しくありません");
+    return { blocked: true, errors, warnings };
+  }
+  if (
+    !isHalfHourGrid(input.startHour) ||
+    !isHalfHourGrid(input.endHour) ||
+    input.startHour < 0 ||
+    input.endHour > 24
+  ) {
+    errors.push("時刻は0〜24時の30分刻みで指定してください");
+  }
   if (input.endHour <= input.startHour) {
     errors.push("終了時刻は開始時刻より後にしてください");
   }
-  if (input.plannedPrice < 0) {
-    errors.push("価格は0円以上にしてください");
+  if (!Number.isInteger(input.plannedPrice) || input.plannedPrice < 0) {
+    errors.push("価格は0円以上の整数で指定してください");
   }
 
-  const holidaySet = await getHolidaySet([input.targetDate]);
   if (isHolidayDate(input.targetDate, holidaySet)) {
     errors.push("土日祝は値下げ対象外です（オーナー方針）");
   }
 
   const policy = VENUE_PRICING_POLICY[input.venueSlug];
-  if (!input.isHoldout && policy && input.plannedPrice < policy.floorPrice) {
+  if (policy && input.plannedPrice < policy.floorPrice) {
     errors.push(
-      `${policy.label}の下限価格は${policy.floorPrice}円/hです（指定: ${input.plannedPrice}円/h）`
+      input.isHoldout
+        ? `保護枠には現在の掲載価格（定価）を入力してください（${policy.label}の下限${policy.floorPrice}円/h以上）`
+        : `${policy.label}の下限価格は${policy.floorPrice}円/hです（指定: ${input.plannedPrice}円/h）`
     );
   }
   if (policy?.requiresIsolatedSlot && !input.isHoldout) {
@@ -120,6 +143,26 @@ export async function validatePriceAction(input: PriceActionInput): Promise<Vali
   }
 
   return { blocked: errors.length > 0, errors, warnings };
+}
+
+/**
+ * 価格施策のガードレール検証（DBの祝日データを参照する外側）。
+ * 祝日データが取得できない・対象年が未登録のときはfail-closed（保存をブロック）にする。
+ * 「土日祝の値下げ指示が保存できたら重大バグ」というオーナー方針のため、安全側に倒す。
+ */
+export async function validatePriceAction(input: PriceActionInput): Promise<ValidationResult> {
+  let holidaySet: Set<string>;
+  try {
+    holidaySet = await getHolidaySetStrict([input.targetDate]);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    return {
+      blocked: true,
+      errors: [`祝日データを確認できないため保存できません（${detail}）。時間をおいて再試行してください`],
+      warnings: [],
+    };
+  }
+  return validatePriceActionWithHolidays(input, holidaySet);
 }
 
 /** 価格施策を作成する（作成前に validatePriceAction を必ず呼ぶこと） */
@@ -146,7 +189,11 @@ export async function createPriceAction(
   return data as PriceAction;
 }
 
-/** 価格施策の実施結果を記録する（スタッフが実際に設定した後の更新） */
+/**
+ * 価格施策の実施結果を記録する（スタッフが実際に設定した後の更新）。
+ * applied_price/applied_at/applied_byは「実際に設定した」記録なので status=applied のときだけ入れる。
+ * reverted（定価に戻した）・expired（未実施のまま終了）で実施日時を刻印すると台帳の意味が濁るため。
+ */
 export async function recordPriceActionResult(
   id: string,
   input: {
@@ -157,49 +204,26 @@ export async function recordPriceActionResult(
   }
 ): Promise<void> {
   const db = getDb();
-  const { error } = await db
+  const isApplied = input.status === "applied";
+  const { data, error } = await db
     .from("price_actions")
     .update({
       status: input.status,
-      applied_price: input.appliedPrice,
-      applied_by: input.appliedBy,
-      applied_at: new Date().toISOString(),
+      applied_price: isApplied ? input.appliedPrice : null,
+      applied_by: isApplied ? input.appliedBy : null,
+      applied_at: isApplied ? new Date().toISOString() : null,
       result_note: input.resultNote,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
   if (error) throw new Error(`価格施策の更新に失敗しました: ${error.message}`);
+  if (!data || data.length === 0) throw new Error("対象の価格施策が見つかりません");
 }
 
-/**
- * 上野系（孤立1時間枠ルールの拠点）で、指定枠が本当に「予約と予約に挟まれた孤立1時間」かを判定する。
- * 定義: 対象枠の開始時刻ちょうどに終わる確定予約と、終了時刻ちょうどに始まる確定予約が同日に両方存在すること。
- * 参考情報であり、これ自体は保存をブロックしない（スタッフ・オーナーの目視確認を優先する）。
- */
-export async function checkIsolatedGap(
-  venueId: string,
-  targetDate: string,
-  startHour: number,
-  endHour: number
-): Promise<boolean> {
-  const db = getDb();
-  const dayStart = jstToUtc(targetDate, 0);
-  const dayEnd = jstToUtc(targetDate, 24);
-  const { data, error } = await db
-    .from("bookings")
-    .select("start_at, end_at")
-    .eq("venue_id", venueId)
-    .eq("booking_status", "confirmed")
-    .gte("start_at", dayStart.toISOString())
-    .lt("start_at", dayEnd.toISOString());
-  if (error || !data) return false;
-
-  const targetStart = jstToUtc(targetDate, startHour).getTime();
-  const targetEnd = jstToUtc(targetDate, endHour).getTime();
-  const hasBefore = data.some((b) => new Date(b.end_at).getTime() === targetStart);
-  const hasAfter = data.some((b) => new Date(b.start_at).getTime() === targetEnd);
-  return hasBefore && hasAfter;
-}
+// 補足: 上野系の「孤立1時間枠」の自動判定は、自社予約だけでなくGoogleカレンダーのbusy
+// （外部モール予約が大半）を見ないと実運用で機能しないため、STEP 1（効果測定ループ）で
+// getBusyRanges併用の形で実装する。STEP 0では管理画面の注意書きテキストで運用カバーする。
 
 export type PriceActionListFilter = {
   venueId?: string;

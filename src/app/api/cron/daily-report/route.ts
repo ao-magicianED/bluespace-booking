@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
       snapshotSaveFailed = true;
       console.error("[cron/daily-report] スナップショット保存に失敗:", e);
     }
-    // 予約カーブ（価格施策の効果測定用）の記録も同様にベストエフォート
+    const delivered = await sendAdminAlert(subject, text, html);
+    // 予約カーブ（価格施策の効果測定用）の記録もベストエフォート。
+    // GoogleカレンダーのFreeBusyを全拠点分叩き直すため時間がかかりうる。関数タイムアウトで
+    // 巻き添えにならないよう、必ずレポート送信の後に実行する（レポート配信が最優先）
     let paceSnapshotSaveFailed = false;
     try {
       await savePaceSnapshots(await collectPaceSnapshots(new Date()));
@@ -40,7 +43,6 @@ export async function GET(req: NextRequest) {
       paceSnapshotSaveFailed = true;
       console.error("[cron/daily-report] 予約カーブスナップショット保存に失敗:", e);
     }
-    const delivered = await sendAdminAlert(subject, text, html);
     if (!delivered.discord && !delivered.email) {
       // レポートは生成できたが誰にも届いていない＝ジョブとしては失敗（Vercelのログで気づけるようにする）
       console.error("[cron/daily-report] 全チャネルで配信失敗（Discord・メールとも未達）");
