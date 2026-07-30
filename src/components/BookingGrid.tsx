@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AvailabilityResponse, DaySlots, VenueOption } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
+import { gaEvent } from "@/lib/gtag";
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -428,6 +429,12 @@ export default function BookingGrid({
     if (!selection) return;
     setSubmitting(true);
     setError("");
+    gaEvent("begin_checkout", {
+      currency: "JPY",
+      value: quote?.total ?? 0,
+      payment_method: effectivePayment,
+      items: [{ item_name: venueSlug, quantity: 1 }],
+    });
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PurchaseTracker from "@/components/PurchaseTracker";
 import { getStripe } from "@/lib/stripe";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
@@ -78,6 +79,11 @@ export default async function ThanksPage({
   if (result.kind === "confirmed") {
     return (
       <div className="thanks-box">
+        <PurchaseTracker
+          bookingId={result.bookingId}
+          amount={result.amount}
+          venueName={result.venueName}
+        />
         <h1>ご予約ありがとうございます</h1>
         <p>決済が完了し、ご予約が確定しました。</p>
         <p>

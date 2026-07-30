@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import AuthNav from "@/components/AuthNav";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 import "./globals.css";
 
 const notoSansJP = Noto_Sans_JP({
@@ -22,11 +23,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: {
-    default: "ブルースペース｜レンタルスペース公式予約サイト",
+    default: "ブルースペース｜東京のレンタルスペース・貸し会議室 公式予約サイト",
     template: "%s | ブルースペース",
   },
   description:
-    "ブルーステージ合同会社が運営するレンタルスペース「ブルースペース」の公式予約サイト。仲介手数料なしの最安価格、空き状況を見てそのままクレジットカードで予約完了。",
+    "ブルーステージ合同会社が運営する東京のレンタルスペース・貸し会議室「ブルースペース」の公式予約サイト。上野・神田・西新宿・京成小岩・白金高輪の7拠点。仲介手数料なしの最安価格、空き状況を見てそのままクレジットカードで予約完了。",
   // canonical はここに置かない。Next.js の metadata は親から継承されるため、
   // ルートに固定値を置くと自前で上書きしていない全ページが「トップページが正規URL」と
   // 申告してしまい、Search Console で「代替ページ（適切なcanonicalタグあり）」になる。
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <p>© ブルーステージ合同会社</p>
           </div>
         </footer>
+        <GoogleAnalytics />
       </body>
     </html>
   );
