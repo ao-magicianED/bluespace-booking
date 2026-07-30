@@ -1,8 +1,15 @@
 // GA4（Google Analytics 4）のクライアント用ヘルパー。
 // 測定IDはHTMLに必ず露出する公開値のため、フォールバックの直書きは機密に当たらない。
 // 環境ごとに変えたい場合は NEXT_PUBLIC_GA_MEASUREMENT_ID で上書きする。
+// 本番ビルド以外はフォールバックさせない（ローカル開発・Previewのアクセスが
+// 本番プロパティに混ざるのを防ぐ。IDが空のときは計測全体が無効になる）。
+const envId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 export const GA_MEASUREMENT_ID =
-  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "G-Q22NGPRZKE";
+  envId && /^G-[A-Z0-9]+$/.test(envId)
+    ? envId
+    : process.env.NODE_ENV === "production"
+      ? "G-Q22NGPRZKE"
+      : "";
 
 declare global {
   interface Window {
@@ -15,10 +22,14 @@ declare global {
 // gtag.js本体のロード完了前に積んだコマンドもロード後に順番に処理されるため、
 // スクリプトのロード順を気にせずどこからでも呼べる。
 export function gtag(..._args: unknown[]) {
-  if (typeof window === "undefined") return;
-  window.dataLayer = window.dataLayer || [];
-  // eslint-disable-next-line prefer-rest-params
-  window.dataLayer.push(arguments);
+  if (typeof window === "undefined" || !GA_MEASUREMENT_ID) return;
+  try {
+    window.dataLayer = window.dataLayer || [];
+    // eslint-disable-next-line prefer-rest-params
+    window.dataLayer.push(arguments);
+  } catch {
+    // 計測の失敗が予約・決済導線を止めることは絶対にないよう、例外はここで吸収する
+  }
 }
 
 let initialized = false;

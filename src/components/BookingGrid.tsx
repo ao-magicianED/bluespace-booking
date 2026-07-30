@@ -429,12 +429,6 @@ export default function BookingGrid({
     if (!selection) return;
     setSubmitting(true);
     setError("");
-    gaEvent("begin_checkout", {
-      currency: "JPY",
-      value: quote?.total ?? 0,
-      payment_method: effectivePayment,
-      items: [{ item_name: venueSlug, quantity: 1 }],
-    });
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -463,6 +457,14 @@ export default function BookingGrid({
         setSubmitting(false);
         return;
       }
+      // Checkout作成が成功した時点で計測する（バリデーション失敗・枠競合409等の
+      // 「試行」をファネルに混ぜない）。gtag.jsはbeacon送信のため直後の遷移でも概ね届く
+      gaEvent("begin_checkout", {
+        currency: "JPY",
+        value: quote?.total ?? 0,
+        payment_method: effectivePayment,
+        items: [{ item_id: venueSlug, item_name: venueSlug, quantity: 1 }],
+      });
       if (json.invoiceFlow) {
         setInvoiceDone({ dueAt: json.dueAt, hostedInvoiceUrl: json.hostedInvoiceUrl ?? null });
         setSubmitting(false);

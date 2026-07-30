@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -21,6 +22,10 @@ export const dynamic = "force-dynamic";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 
+// generateMetadataとページ本体が同一リクエスト内で同じ拠点を二重取得しないようメモ化する
+// （getVenueBySlugはfetchでなくSupabaseクライアントのためNext.js自動メモ化の対象外）
+const getVenueBySlugCached = cache(getVenueBySlug);
+
 export async function generateMetadata({
   params,
 }: {
@@ -36,10 +41,10 @@ export async function generateMetadata({
   let priceText = "格安";
   if (isDbConfigured()) {
     try {
-      const venue = await getVenueBySlug(slug);
+      const venue = await getVenueBySlugCached(slug);
       if (venue) priceText = `¥${venue.hourly_price.toLocaleString()}/時間〜`;
-    } catch {
-      // 価格なし表記で続行
+    } catch (e) {
+      console.error("[metadata] 拠点価格の取得に失敗。価格なし表記で続行します", e);
     }
   }
   const title = content.seo.title.replace("{price}", priceText);
@@ -69,7 +74,7 @@ export default async function VenuePage({
   const { slug } = await params;
   if (!isDbConfigured()) notFound();
 
-  const venue = await getVenueBySlug(slug);
+  const venue = await getVenueBySlugCached(slug);
   if (!venue) notFound();
   const content = getVenueContent(slug);
 

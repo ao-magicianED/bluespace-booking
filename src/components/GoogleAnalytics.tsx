@@ -19,6 +19,9 @@ export default function GoogleAnalytics() {
     gaEvent("page_view", { page_path: pathname });
   }, [pathname]);
 
+  // 測定ID無し（ローカル開発・Preview等）ではタグ自体を読み込まない
+  if (!GA_MEASUREMENT_ID) return null;
+
   return (
     <Script
       src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
