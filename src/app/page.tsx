@@ -60,6 +60,20 @@ export default async function HomePage() {
 
   const list = (venues ?? []) as Venue[];
 
+  // 拠点一覧のItemList。Googleに「東京7拠点のレンタルスペースを束ねるサイト」だと伝える
+  const itemListJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "@id": `${SITE}/#venues`,
+    name: "ブルースペース 拠点一覧",
+    itemListElement: list.map((v, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: v.name,
+      url: `${SITE}/${v.slug}`,
+    })),
+  };
+
   return (
     <>
       <script
@@ -69,6 +83,10 @@ export default async function HomePage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd).replace(/</g, "\\u003c") }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd).replace(/</g, "\\u003c") }}
       />
       <section className="home-hero">
         <span className="hero-eyebrow">公式予約・仲介手数料なし</span>

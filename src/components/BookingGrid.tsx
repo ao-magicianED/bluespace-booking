@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AvailabilityResponse, DaySlots, VenueOption } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
+import { gaEvent } from "@/lib/gtag";
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -456,6 +457,14 @@ export default function BookingGrid({
         setSubmitting(false);
         return;
       }
+      // Checkout作成が成功した時点で計測する（バリデーション失敗・枠競合409等の
+      // 「試行」をファネルに混ぜない）。gtag.jsはbeacon送信のため直後の遷移でも概ね届く
+      gaEvent("begin_checkout", {
+        currency: "JPY",
+        value: quote?.total ?? 0,
+        payment_method: effectivePayment,
+        items: [{ item_id: venueSlug, item_name: venueSlug, quantity: 1 }],
+      });
       if (json.invoiceFlow) {
         setInvoiceDone({ dueAt: json.dueAt, hostedInvoiceUrl: json.hostedInvoiceUrl ?? null });
         setSubmitting(false);

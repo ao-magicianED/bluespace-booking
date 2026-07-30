@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PurchaseTracker from "@/components/PurchaseTracker";
 import { getStripe } from "@/lib/stripe";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
@@ -17,6 +18,7 @@ type Result =
       isMember: boolean;
       venueName: string;
       venueAddress: string;
+      venueSlug: string;
     }
   | { kind: "processing" }
   | { kind: "unknown" };
@@ -45,9 +47,9 @@ async function verify(sessionId: string | undefined): Promise<Result> {
     if (booking.booking_status === "confirmed") {
       const { data: venue } = await getDb()
         .from("venues")
-        .select("name, address")
+        .select("name, address, slug")
         .eq("id", booking.venue_id)
-        .maybeSingle<Pick<Venue, "name" | "address">>();
+        .maybeSingle<Pick<Venue, "name" | "address" | "slug">>();
       return {
         kind: "confirmed",
         shortId: booking.id.replace(/-/g, "").slice(-8),
@@ -57,6 +59,7 @@ async function verify(sessionId: string | undefined): Promise<Result> {
         isMember: booking.user_id != null,
         venueName: venue?.name ?? "",
         venueAddress: venue?.address ?? "",
+        venueSlug: venue?.slug ?? "",
       };
     }
     // 決済は済んでいるがWebhook処理が未着（数秒〜数分のラグ）
@@ -78,6 +81,12 @@ export default async function ThanksPage({
   if (result.kind === "confirmed") {
     return (
       <div className="thanks-box">
+        <PurchaseTracker
+          bookingId={result.bookingId}
+          amount={result.amount}
+          venueName={result.venueName}
+          venueSlug={result.venueSlug}
+        />
         <h1>ご予約ありがとうございます</h1>
         <p>決済が完了し、ご予約が確定しました。</p>
         <p>
