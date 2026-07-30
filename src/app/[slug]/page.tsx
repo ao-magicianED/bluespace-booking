@@ -31,10 +31,22 @@ export async function generateMetadata({
   // コンテンツ定義が無いslugでも canonical だけは自己参照にしておく
   // （返さないと親layoutのmetadataを継承してしまうため）
   if (!content) return { alternates: { canonical: `${SITE}/${slug}` } };
-  const title = `${content.name}｜${content.station.split("（")[0]}のレンタルスペース【公式予約】`;
-  const description = `${content.catchCopy}。${content.capacityShort}。公式サイト予約なら仲介手数料なしの最安価格。空き状況を見てそのままオンライン決済で予約完了。`;
+  // {price} はDBの現在価格で置換する（価格改定にtitle/descriptionを自動追随させる）。
+  // 取得できないときは「格安」表記に落としてフォーマットを保つ。
+  let priceText = "格安";
+  if (isDbConfigured()) {
+    try {
+      const venue = await getVenueBySlug(slug);
+      if (venue) priceText = `¥${venue.hourly_price.toLocaleString()}/時間〜`;
+    } catch {
+      // 価格なし表記で続行
+    }
+  }
+  const title = content.seo.title.replace("{price}", priceText);
+  const description = content.seo.description.replace("{price}", priceText);
   return {
-    title,
+    // seo.titleはブランド名込みの完成形のため、親の「%s | ブルースペース」テンプレートを適用させない
+    title: { absolute: title },
     description,
     alternates: { canonical: `${SITE}/${slug}` },
     openGraph: {
@@ -292,6 +304,13 @@ export default async function VenuePage({
           </div>
         </section>
       )}
+
+      {content?.seo.sections.map((s) => (
+        <section key={s.title} className="venue-section">
+          <h2>{s.title}</h2>
+          <p>{s.body}</p>
+        </section>
+      ))}
 
       <section className="venue-section" id="availability">
         <h2>今週の空き状況（直近7日間）</h2>
