@@ -3,16 +3,10 @@ import iconv from "iconv-lite";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { computeRepeatNumbers, formatMemberNo, realizedRevenue } from "@/lib/ledger";
+import { bookingStatusLabel } from "@/lib/booking-status";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: "決済待ち",
-  confirmed: "確定",
-  cancelled: "キャンセル",
-  expired: "期限切れ",
-};
 
 function jst(iso: string | null): string {
   if (!iso) return "";
@@ -84,7 +78,7 @@ export async function GET() {
     lines.push(
       [
         b.id.replace(/-/g, "").slice(-8).toUpperCase(),
-        STATUS_LABEL[b.booking_status] ?? b.booking_status,
+        bookingStatusLabel(b),
         jst(b.start_at),
         jst(b.end_at),
         b.venues?.name ?? "",

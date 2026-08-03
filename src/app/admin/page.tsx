@@ -5,16 +5,10 @@ import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
 import { jstToUtc, todayJst } from "@/lib/slots";
 import { realizedRevenue } from "@/lib/ledger";
+import { bookingStatusLabel } from "@/lib/booking-status";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: "決済待ち",
-  confirmed: "確定",
-  cancelled: "キャンセル",
-  expired: "期限切れ",
-};
 
 type Row = Booking & { venues: { name: string } | null };
 
@@ -190,7 +184,7 @@ export default async function AdminPage({
                 </td>
                 <td>
                   <span className={`status-badge st-${b.booking_status}`}>
-                    {STATUS_LABEL[b.booking_status] ?? b.booking_status}
+                    {bookingStatusLabel(b)}
                   </span>
                 </td>
                 <td>

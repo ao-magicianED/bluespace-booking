@@ -3,7 +3,7 @@ import { getDb } from "@/lib/supabase";
 import { runConfirmationSideEffects, formatBookingPeriod } from "@/lib/confirm";
 import { refreshHolidays } from "@/lib/holidays";
 import { runCouponCampaigns } from "@/lib/campaigns";
-import { voidInvoice } from "@/lib/invoice";
+import { expireOverdueInvoices, type ExpireInvoicesResult } from "@/lib/expire-invoices";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
 import { getStripe } from "@/lib/stripe";
 import { mapSearchUrl, myBookingUrl, reviewUrl } from "@/lib/site-url";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     calendarRetried: 0,
     calendarFailed: 0,
     holidays: 0,
-    invoicesVoided: 0,
+    invoiceLifecycle: { expired: 0, notified: 0, voided: 0, reminded: 0, errors: 0 } as ExpireInvoicesResult,
     changeRequestsExpired: 0,
     priceAdjustmentsExpired: 0,
     remindersSent: 0,
@@ -81,49 +81,13 @@ export async function GET(req: NextRequest) {
   }
   result.priceAdjustmentsExpired = (stalePriceAdjustments ?? []).length;
 
-  // 0-a. 期限切れの請求書払い予約: 請求書を無効化してお客様に通知してから失効させる
-  //（カードのpendingと違い、明示的な後始末が必要）
-  const { data: dueInvoices } = await db
-    .from("bookings")
-    .select("*, venues(name)")
-    .eq("booking_status", "pending")
-    .eq("payment_method", "invoice")
-    .lt("expires_at", new Date().toISOString());
-  for (const b of (dueInvoices ?? []) as (Booking & { venues: { name: string } | null })[]) {
-    const { data: upd } = await db
-      .from("bookings")
-      .update({ booking_status: "expired", updated_at: new Date().toISOString() })
-      .eq("id", b.id)
-      .eq("booking_status", "pending")
-      .select("id");
-    if ((upd ?? []).length === 0) continue; // 入金が間に合った等
-    if (b.stripe_invoice_id) {
-      try {
-        await voidInvoice(b.stripe_invoice_id);
-      } catch (e) {
-        console.error("[cron] 請求書void失敗:", e);
-      }
-    }
-    await sendMail({
-      to: b.customer_email,
-      subject: `【お支払い期限切れ】ご予約キャンセルのお知らせ`,
-      text: [
-        `${b.customer_name} 様`,
-        "",
-        `お支払い期限までに入金の確認ができなかったため、以下のご予約はキャンセルされました。`,
-        "",
-        `スペース: ${b.venues?.name ?? ""}`,
-        `日時: ${formatBookingPeriod(b)}`,
-        "",
-        "引き続きご利用をご希望の場合は、お手数ですが再度ご予約ください。",
-        "ブルーステージ合同会社",
-      ].join("\n"),
-    });
-    await sendAdminAlert(
-      "請求書の支払期限切れ→自動キャンセル",
-      `${b.venues?.name ?? ""} ${formatBookingPeriod(b)}\n会社: ${b.company_name ?? ""}（${b.customer_name}様）\n金額: ¥${b.total_amount.toLocaleString()}\n予約ID: ${b.id}`
-    );
-    result.invoicesVoided++;
+  // 0-a. 請求書払いの期限切れ処理（枠解放・通知・遅延void・リマインダー）。
+  // 本番はGAS外部cronから /api/cron/expire-invoices を10分おきに叩く運用が主で、
+  // ここはその停止時のフォールバック（最悪ケースで期限後〜21時間保持）。
+  try {
+    result.invoiceLifecycle = await expireOverdueInvoices();
+  } catch (e) {
+    console.error("[cron] 請求書期限切れ処理エラー:", e);
   }
 
   // 0. 祝日データの自動更新（holidays-jp API・前年/今年/翌年分。失敗しても続行）

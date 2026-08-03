@@ -4,16 +4,10 @@ import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
 import { computeRepeatNumbers, formatMemberNo, realizedRevenue } from "@/lib/ledger";
+import { bookingStatusLabel } from "@/lib/booking-status";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: "決済待ち",
-  confirmed: "確定",
-  cancelled: "キャンセル",
-  expired: "期限切れ",
-};
 
 const FILTERS = [
   { key: "confirmed", label: "確定" },
@@ -136,7 +130,7 @@ export default async function AdminLedgerPage({
                   <td>{b.payment_method === "invoice" ? "請求書" : "カード"}</td>
                   <td>
                     <span className={`status-badge st-${b.booking_status}`}>
-                      {STATUS_LABEL[b.booking_status] ?? b.booking_status}
+                      {bookingStatusLabel(b)}
                     </span>
                   </td>
                   <td className="ledger-amount">

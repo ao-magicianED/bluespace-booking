@@ -161,7 +161,9 @@ export async function runConfirmationSideEffects(
         `地図: ${mapSearchUrl(venue.address)}`,
         `日時: ${period}`,
         ...(booking.party_size ? [`ご利用人数: ${booking.party_size}名`] : []),
-        `料金: ¥${booking.total_amount.toLocaleString()}（決済済み）`,
+        `料金: ¥${booking.total_amount.toLocaleString()}${
+          booking.payment_method === "invoice" ? "（銀行振込・入金確認済み）" : "（決済済み）"
+        }`,
         `予約番号: ${booking.id.replace(/-/g, "").slice(-8)}`,
         ...accessSection,
         ``,

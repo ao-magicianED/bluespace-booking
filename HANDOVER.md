@@ -108,7 +108,7 @@ bluespace-booking/（ローカルフォルダ名: レンタルスペース予約
 - **予約コア**: **30分単位**（最小30分・上限は venues.min_hours / max_hours で拠点ごとに設定）・7日グリッド・60日先まで・**開始1分前まで受付**（直前予約を最大限取る設計）
 - **ダブルブッキング防止**: PostgreSQL排他制約（EXCLUDE gist）＋FreeBusy照合＋仮押さえ30分＋猶予10分
 - **決済**: Stripe Checkout（カード）。Webhook署名検証・イベント冪等化（stripe_events）・金額5点照合
-- **請求書払い**（法人）: Stripe Invoicing＋銀行振込（顧客専用口座）。開始72h前まで選択可、期限=min(3日,開始24h前)、入金で自動確定、期限切れ自動キャンセル。**本番E2E検証済み**
+- **請求書払い**（法人）: Stripe Invoicing＋銀行振込（顧客専用口座）。開始120h（5日）前まで選択可、期限=申込の翌営業日18:00（上限95h・開始24h前）。期限後は「枠解放（即時）→通知→遅延void（+24h後）」の3段階に分離し、着金遅延を`invoice.paid`の復旧ロジックで救済する（`src/lib/expire-invoices.ts`）。高頻度チェックはGAS外部cronが`/api/cron/expire-invoices`を10分おきに叩く（`docs/gas-invoice-expiry-cron.md`）。**本番E2E検証済み**
 - **料金**: 平日/土日祝の2本立て＋直前割（当日10%）＋早割（30日前10%）＋自前クーポン（couponsテーブル・原子的消化ですり抜け防止）＋オプション（venue_options）
 
 ### 会員・予約の変更

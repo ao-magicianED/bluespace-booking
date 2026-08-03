@@ -4,29 +4,25 @@ import { getSessionUser } from "@/lib/auth-server";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
 import { formatMemberNo } from "@/lib/ledger";
+import { bookingStatusLabel } from "@/lib/booking-status";
 import type { Booking } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: "決済待ち",
-  confirmed: "確定",
-  cancelled: "キャンセル済み",
-  expired: "期限切れ",
-};
 
 export default async function MyPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const db = getDb();
-  // 会員予約（user_id一致）＋同じメールで行ったゲスト予約をまとめて表示
+  // 会員予約（user_id一致）＋同じメールで行ったゲスト予約をまとめて表示。
+  // expiredも含める（請求書払いの期限切れ等で自動キャンセルされた予約が
+  // 一覧から消えて状況が追えなくなるのを防ぐ）
   const [{ data: bookings, error }, { data: member }] = await Promise.all([
     db
       .from("bookings")
       .select("*, venues(name)")
       .or(`user_id.eq.${user.id},customer_email.eq.${user.email}`)
-      .in("booking_status", ["pending", "confirmed", "cancelled"])
+      .in("booking_status", ["pending", "confirmed", "cancelled", "expired"])
       .order("start_at", { ascending: false })
       .limit(50),
     db.from("member_profiles").select("member_no").eq("user_id", user.id).maybeSingle(),
@@ -65,7 +61,7 @@ export default async function MyPage() {
             </div>
             <div>
               <span className={`status-badge st-${b.booking_status}`}>
-                {STATUS_LABEL[b.booking_status] ?? b.booking_status}
+                {bookingStatusLabel(b)}
               </span>
               　¥{b.total_amount.toLocaleString()}
               {b.booking_status === "confirmed" && b.end_at < now && "　✔ 利用済み"}

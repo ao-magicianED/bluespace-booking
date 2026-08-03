@@ -3,6 +3,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AvailabilityResponse, DaySlots, VenueOption } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
+import { isInvoiceEligible } from "@/lib/invoice-rules";
+import { formatJstWeekdayDateTime } from "@/lib/slots";
+
+type InvoicePreview = {
+  eligible: boolean;
+  dueAt: string | null;
+  dueOnNonBusinessDay: boolean;
+  cappedBy: string | null;
+};
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -115,6 +124,7 @@ export default function BookingGrid({
   const [appliedCoupon, setAppliedCoupon] = useState("");
   const [quote, setQuote] = useState<PriceBreakdown | null>(null);
   const [quoteError, setQuoteError] = useState("");
+  const [invoicePreview, setInvoicePreview] = useState<InvoicePreview | null>(null);
   const [form, setForm] = useState({
     name: initialForm?.name ?? "",
     email: initialForm?.email ?? "",
@@ -264,6 +274,7 @@ export default function BookingGrid({
     if (!selection || selectedSlots.length === 0 || debouncedQuoteParams.step === "select") {
       setQuote(null);
       setQuoteError("");
+      setInvoicePreview(null);
       return;
     }
     let stale = false;
@@ -286,11 +297,13 @@ export default function BookingGrid({
         if (!res.ok) {
           setQuote(null);
           setQuoteError(json.error ?? "見積もりに失敗しました");
+          setInvoicePreview(null);
           if (appliedCoupon) setAppliedCoupon("");
           return;
         }
         setQuote(json.breakdown);
         setQuoteError("");
+        setInvoicePreview(json.invoicePreview ?? null);
       } catch {
         if (!stale) setQuoteError("見積もりの通信に失敗しました");
       }
@@ -396,9 +409,12 @@ export default function BookingGrid({
   const effectiveHours = confirmEndHour - confirmStartHour;
   const invoiceEligible =
     selection !== null &&
-    new Date(`${selection.date}T${String(Math.floor(confirmStartHour)).padStart(2, "0")}:${String(Math.round((confirmStartHour % 1) * 60)).padStart(2, "0")}:00+09:00`).getTime() -
-      Date.now() >=
-      72 * 60 * 60 * 1000;
+    isInvoiceEligible(
+      new Date(
+        `${selection.date}T${String(Math.floor(confirmStartHour)).padStart(2, "0")}:${String(Math.round((confirmStartHour % 1) * 60)).padStart(2, "0")}:00+09:00`
+      ),
+      new Date()
+    );
   const effectivePayment = paymentMethod === "invoice" && (!invoiceEligible || customerType !== "corporate") ? "card" : paymentMethod;
   const canSubmit =
     selection !== null &&
@@ -916,15 +932,26 @@ export default function BookingGrid({
                 />
                 請求書払い・銀行振込（入金確認後に確定）
                 {!invoiceEligible && selection && (
-                  <span className="policy">　※利用開始の3日前までのご予約で選択できます</span>
+                  <span className="policy">　※利用開始の5日前までのご予約で選択できます</span>
                 )}
               </label>
+              {effectivePayment === "invoice" && invoicePreview?.eligible && invoicePreview.dueAt && (
+                <p className="policy invoice-due-preview">
+                  お支払い期限: <strong>{formatJstWeekdayDateTime(new Date(invoicePreview.dueAt))}</strong>
+                  {invoicePreview.dueOnNonBusinessDay && (
+                    <>
+                      <br />
+                      ※期限日は金融機関の休業日です。土日祝も振込可能なネットバンキング等のご利用、または前営業日中のお振込をおすすめします。
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           )}
 
           <p className="policy">
             {effectivePayment === "invoice"
-              ? "請求書（PDF・お振込先記載）をメールでお送りします。お支払い期限は発行から3日以内（利用直前のご予約は利用開始24時間前まで）。入金確認をもって予約確定となり、期限を過ぎると自動キャンセルされます。"
+              ? "請求書（PDF・お振込先記載）をメールでお送りします。お支払い期限は申込の翌営業日18:00です（連休を挟む場合はこれより早まることがあります。正確な期限は上に表示されます）。入金確認をもって予約確定となり、期限までに入金が確認できない場合は仮押さえが自動解除されます。"
               : "ご予約はクレジットカード決済の完了をもって確定します。"}{" "}
             キャンセル料: 利用日の8日以上前は無料 / 7日前〜2日前は50% / 前日・当日は100%（返金不可）。
           </p>
@@ -944,14 +971,7 @@ export default function BookingGrid({
                 <strong>📧 請求書をお送りしました。</strong>
                 <br />
                 {form.email} 宛てに、お振込先を記載した請求書メールが届きます（Stripeから送信）。
-                お支払い期限:{" "}
-                {new Date(invoiceDone.dueAt).toLocaleString("ja-JP", {
-                  timeZone: "Asia/Tokyo",
-                  month: "long",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                お支払い期限: {formatJstWeekdayDateTime(new Date(invoiceDone.dueAt))}
                 。入金確認後、予約確定メールをお送りします。それまでこの枠はお客様用に確保されます。
                 {invoiceDone.hostedInvoiceUrl && (
                   <>

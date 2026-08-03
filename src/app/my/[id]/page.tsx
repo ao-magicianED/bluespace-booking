@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-server";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
+import { formatJstWeekdayDateTime } from "@/lib/slots";
 import { calcRefund, describePolicy } from "@/lib/cancellation";
 import { effectiveTotal } from "@/lib/adjustment";
 import CancelBookingButton from "@/components/CancelBookingButton";
@@ -117,11 +118,33 @@ export default async function BookingDetailPage({
             <tr>
               <th>状態</th>
               <td>
-                {booking.booking_status === "confirmed"
-                  ? "確定（決済済み）"
-                  : booking.booking_status === "pending"
-                    ? "決済待ち"
-                    : "キャンセル済み"}
+                {booking.booking_status === "confirmed" ? (
+                  "確定（決済済み）"
+                ) : booking.booking_status === "pending" && booking.payment_method === "invoice" ? (
+                  <>
+                    入金待ち
+                    {booking.expires_at && (
+                      <>
+                        <br />
+                        <span className="policy">
+                          お支払い期限: {formatJstWeekdayDateTime(new Date(booking.expires_at))}
+                        </span>
+                      </>
+                    )}
+                  </>
+                ) : booking.booking_status === "pending" ? (
+                  "決済待ち"
+                ) : booking.booking_status === "expired" ? (
+                  <>
+                    期限切れ
+                    <br />
+                    <span className="policy">
+                      お支払い期限までに入金が確認できなかったため、仮押さえを解除しました。
+                    </span>
+                  </>
+                ) : (
+                  "キャンセル済み"
+                )}
               </td>
             </tr>
             <tr>

@@ -71,6 +71,18 @@ export function hourToTimeStr(hour: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/** UTCのDate → JSTの「M/D(曜) HH:mm」形式（請求書の支払期限表示等、曜日つきが必須の場面で使う） */
+export function formatJstWeekdayDateTime(d: Date): string {
+  return d.toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /**
  * 1スロット（30分）の状態を判定する。
  * busy には「Googleカレンダーの埋まり」と「自社のpending/confirmed予約」を合成して渡す。

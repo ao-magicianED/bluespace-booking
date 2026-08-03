@@ -63,6 +63,14 @@ export type Booking = {
   customer_type: "individual" | "corporate";
   company_name: string | null;
   stripe_invoice_id: string | null;
+  /** 請求書払いで作成したStripe顧客ID（残高チェック・入金突合に使う。0021で追加） */
+  stripe_invoice_customer_id: string | null;
+  /** 入金リマインダー（期限9時間前）の送信済みフラグ */
+  invoice_reminder_sent_at: string | null;
+  /** 期限切れ通知（仮押さえ解除メール）の送信済みフラグ */
+  invoice_expiry_notice_sent_at: string | null;
+  /** 遅延void（期限+24h後）の実行済みフラグ */
+  invoice_voided_at: string | null;
   party_size: number | null;
   receipt_name: string | null;
   receipt_first_issued_at: string | null;

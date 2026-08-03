@@ -7,8 +7,12 @@ import { sendMail, sendAdminAlert } from "@/lib/mail";
 import { adminBookingUrl, myBookingUrl } from "@/lib/site-url";
 import type { Booking, BookingAdjustment, BookingChangeRequest, Venue } from "@/lib/types";
 import { applyApprovedTimeChange } from "@/lib/apply-time-change";
+import { getCustomerCashBalanceJpy } from "@/lib/invoice";
 
 export const dynamic = "force-dynamic";
+
+/** Webhook processing のリース期間。これを過ぎたprocessing行は「処理中にクラッシュした」とみなし再claimする */
+const PROCESSING_LEASE_MS = 15 * 60 * 1000;
 
 /**
  * POST /api/webhooks/stripe
@@ -41,8 +45,11 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
 
-  // --- 冪等化: 同じイベントは一度しか処理しない（status方式） ---
-  // processing/processed → 重複としてスキップ / failed → 再送時に再処理を許可
+  // --- 冪等化: 同じイベントは一度しか処理しない（status方式＋processingリース） ---
+  // processed → 重複としてスキップ / failed → 再送時に再処理を許可 /
+  // processing → 15分以内なら重複スキップ、15分超なら「処理中にクラッシュした」とみなし再claim
+  // （リースが無いと、processing行を作った直後にプロセスが落ちた場合、Stripeからの
+  //   全再送が永久に「重複」としてスキップされ、入金確定イベントが二度と処理されなくなる）
   const { error: dupError } = await db
     .from("stripe_events")
     .insert({ event_id: event.id, type: event.type, status: "processing" });
@@ -53,15 +60,34 @@ export async function POST(req: NextRequest) {
         .select("status")
         .eq("event_id", event.id)
         .single();
-      if (existing?.status !== "failed") {
-        // 処理済み（または処理中）の再送 → 正常終了
+      if (existing?.status === "processed") {
         return NextResponse.json({ received: true, duplicate: true });
       }
-      // 前回失敗 → 再処理する
-      await db
-        .from("stripe_events")
-        .update({ status: "processing", processed_at: new Date().toISOString() })
-        .eq("event_id", event.id);
+      if (existing?.status === "failed") {
+        // 前回失敗 → 再処理する
+        await db
+          .from("stripe_events")
+          .update({
+            status: "processing",
+            processing_started_at: new Date().toISOString(),
+            processed_at: new Date().toISOString(),
+          })
+          .eq("event_id", event.id);
+      } else {
+        // processing中 → リース期限切れなら原子的に再claimして処理を続行、
+        // 新鮮なprocessingなら本当に処理中なので重複としてスキップ
+        const staleBefore = new Date(Date.now() - PROCESSING_LEASE_MS).toISOString();
+        const { data: reclaimed } = await db
+          .from("stripe_events")
+          .update({ processing_started_at: new Date().toISOString() })
+          .eq("event_id", event.id)
+          .eq("status", "processing")
+          .lt("processing_started_at", staleBefore)
+          .select("event_id");
+        if (!reclaimed || reclaimed.length === 0) {
+          return NextResponse.json({ received: true, duplicate: true });
+        }
+      }
     } else {
       console.error("[webhook] イベント記録失敗:", dupError);
       return NextResponse.json({ error: "event log failed" }, { status: 500 });
@@ -82,6 +108,9 @@ export async function POST(req: NextRequest) {
       case "invoice.voided":
       case "invoice.marked_uncollectible":
         await handleInvoiceVoided(event.data.object as Stripe.Invoice);
+        break;
+      case "customer_cash_balance_transaction.created":
+        await handleCashBalanceTransaction(event.data.object as Stripe.CustomerCashBalanceTransaction);
         break;
       case "refund.failed":
         await handleRefundFailed(event.data.object as Stripe.Refund);
@@ -313,8 +342,21 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   if (updError) throw new Error(`予約確定エラー: ${updError.message}`);
 
   let freshlyConfirmed = (updated ?? []).length > 0;
-  if (!freshlyConfirmed && booking.booking_status === "confirmed") return; // 再送
-  if (!freshlyConfirmed && booking.booking_status === "expired") {
+  // stale-read対策: 0件更新の場合、SELECT時点でメモリに保持した booking.booking_status は
+  // 古い可能性がある（SELECT〜UPDATEの間にcronがexpired化した等）。DBから現在値を再取得してから分岐する。
+  // これを怠ると、本来「expired→confirmed」の復旧を試みるべき場面で
+  // メモリ上のstale statusが"pending"のままのため復旧を一度も試みず、誤った復旧不能アラートが出る。
+  let currentStatus: Booking["booking_status"] = booking.booking_status;
+  if (!freshlyConfirmed) {
+    const { data: fresh } = await db
+      .from("bookings")
+      .select("booking_status")
+      .eq("id", bookingId)
+      .maybeSingle<{ booking_status: Booking["booking_status"] }>();
+    if (fresh) currentStatus = fresh.booking_status;
+  }
+  if (!freshlyConfirmed && currentStatus === "confirmed") return; // 再送
+  if (!freshlyConfirmed && currentStatus === "expired") {
     const { data: recovered } = await db
       .from("bookings")
       .update({
@@ -331,7 +373,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     await sendAdminAlert(
       "🚨 期限切れ請求書への入金を検知（返金確認）",
       [
-        `入金時点で予約が ${booking.booking_status} で、枠の復旧もできませんでした。`,
+        `入金時点で予約が ${currentStatus} で、枠の復旧もできませんでした。`,
         `枠が別の予約で埋まっている可能性があります。Stripeで返金し、お客様へ連絡してください。`,
         ``,
         `予約ID: ${bookingId}`,
@@ -345,6 +387,26 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   if (booking.coupon_code) {
     const { error: couponError } = await db.rpc("increment_coupon_use", { p_code: booking.coupon_code });
     if (couponError) console.error("[webhook] クーポン消化エラー:", couponError.message);
+  }
+
+  // 過入金チェック（確定処理後もStripe顧客残高にJPYが残っていれば過入金の可能性）
+  if (booking.stripe_invoice_customer_id) {
+    try {
+      const jpy = await getCustomerCashBalanceJpy(booking.stripe_invoice_customer_id);
+      if (jpy > 0) {
+        await sendAdminAlert(
+          "ℹ️ 過入金の可能性（要確認）",
+          [
+            `入金確定後もStripe顧客残高にJPY残高が残っています。過入金の可能性があります。`,
+            `予約ID: ${bookingId}`,
+            `顧客ID: ${booking.stripe_invoice_customer_id}`,
+            `残高: ¥${jpy.toLocaleString()}`,
+          ].join("\n")
+        );
+      }
+    } catch (e) {
+      console.error("[webhook] 過入金チェック失敗:", e);
+    }
   }
 
   const { data: venue } = await db.from("venues").select("*").eq("id", booking.venue_id).single<Venue>();
@@ -366,14 +428,28 @@ async function handleInvoiceVoided(invoice: Stripe.Invoice): Promise<void> {
 
   const { data: updated, error } = await db
     .from("bookings")
-    .update({ booking_status: "expired", updated_at: new Date().toISOString() })
+    .update({
+      booking_status: "expired",
+      invoice_voided_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", bookingId)
     .eq("stripe_invoice_id", invoice.id as string)
     .eq("booking_status", "pending")
     .select("*");
   if (error) throw new Error(`請求書無効化処理エラー: ${error.message}`);
   const booking = ((updated ?? []) as Booking[])[0];
-  if (!booking) return; // 既に処理済み（Cron等）
+  if (!booking) {
+    // 既にpending以外（Cronの遅延voidが先に処理済み等）。invoice_voided_atが未記録なら埋めておく
+    // （Q2の遅延void処理が同じ請求書へ再試行し続けるのを早期に止める）
+    await db
+      .from("bookings")
+      .update({ invoice_voided_at: new Date().toISOString() })
+      .eq("id", bookingId)
+      .eq("stripe_invoice_id", invoice.id as string)
+      .is("invoice_voided_at", null);
+    return; // 既に処理済み（Cron等）
+  }
 
   const { data: venue } = await db
     .from("venues")
@@ -411,6 +487,52 @@ async function handleInvoiceVoided(invoice: Stripe.Invoice): Promise<void> {
       ``,
       `▼予約詳細`,
       adminBookingUrl(booking.id),
+    ].join("\n")
+  );
+}
+
+/**
+ * 銀行振込の入金（customer_cash_balance_transaction.created）を検知。
+ * 猶予期間中（予約=expired・請求書=open）の正常な着金では invoice.paid が別途発火して
+ * 自動確定・復旧されるため、ここで誤警報しないよう「請求書がterminal（void/uncollectible）の
+ * ときだけ」アラートする。type は funded（入金）/ unapplied_from_payment（voidで戻された分）を対象にする。
+ */
+async function handleCashBalanceTransaction(
+  txn: Stripe.CustomerCashBalanceTransaction
+): Promise<void> {
+  if (txn.type !== "funded" && txn.type !== "unapplied_from_payment") return;
+  const customerId = typeof txn.customer === "string" ? txn.customer : txn.customer?.id;
+  if (!customerId) return;
+
+  const db = getDb();
+  const { data: booking } = await db
+    .from("bookings")
+    .select("*")
+    .eq("stripe_invoice_customer_id", customerId)
+    .maybeSingle<Booking>();
+  // このシステムの請求書顧客に紐づかない → 他サービスの決済か無関係の顧客。黙って無視
+  if (!booking || !booking.stripe_invoice_id) return;
+
+  let invoice: Stripe.Invoice;
+  try {
+    invoice = await getStripe().invoices.retrieve(booking.stripe_invoice_id);
+  } catch (e) {
+    console.error("[webhook] cash balance確認用の請求書取得失敗:", e);
+    return;
+  }
+  if (invoice.status !== "void" && invoice.status !== "uncollectible") return; // 正常系（自動充当待ち）
+
+  await sendAdminAlert(
+    "⚠️ 無効化済み請求書への入金を検知（顧客残高に滞留）",
+    [
+      `無効化済みの請求書に対応するStripe顧客のcash balanceに入金がありました。`,
+      `Stripeダッシュボードから返金してください。`,
+      ``,
+      `予約ID: ${booking.id}`,
+      `顧客ID: ${customerId}`,
+      `請求書: ${booking.stripe_invoice_id}（status=${invoice.status}）`,
+      `金額: ¥${Math.abs(txn.net_amount ?? 0).toLocaleString()}`,
+      `お客様: ${booking.customer_name} <${booking.customer_email}>`,
     ].join("\n")
   );
 }

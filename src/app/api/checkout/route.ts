@@ -6,7 +6,7 @@ import { getBusyRanges } from "@/lib/google-calendar";
 import { buildQuote, QuoteError } from "@/lib/quote";
 import { getSessionUser } from "@/lib/auth-server";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { calcInvoiceDueAt, createAndSendInvoice, isInvoiceEligible } from "@/lib/invoice";
+import { calcInvoiceDueAt, createAndSendInvoice, isInvoiceEligible, voidInvoice } from "@/lib/invoice";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
 import {
   jstToUtc,
@@ -14,6 +14,7 @@ import {
   validateBookingRequest,
   hourToTimeStr,
   formatDuration,
+  formatJstWeekdayDateTime,
   PENDING_HOLD_MINUTES,
 } from "@/lib/slots";
 
@@ -172,10 +173,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- 請求書払いの適格性チェック（法人＋利用開始72時間以上前） ---
+    // --- 請求書払いの適格性チェック（法人＋利用開始5日（120時間）以上前） ---
     if (paymentMethod === "invoice" && !isInvoiceEligible(startAt, now)) {
       return NextResponse.json(
-        { error: "請求書払いは利用開始の3日（72時間）前までのご予約で選択できます。カード決済をご利用ください" },
+        { error: "請求書払いは利用開始の5日（120時間）前までのご予約で選択できます。カード決済をご利用ください" },
         { status: 400 }
       );
     }
@@ -185,10 +186,10 @@ export async function POST(req: NextRequest) {
     const sessionUser = await getSessionUser();
     const db = getDb();
     // カード=30分 / 請求書=支払期限まで枠を保持
-    const expiresAt =
-      paymentMethod === "invoice"
-        ? calcInvoiceDueAt(startAt, now)
-        : new Date(now.getTime() + PENDING_HOLD_MINUTES * 60 * 1000);
+    const invoiceDue = paymentMethod === "invoice" ? await calcInvoiceDueAt(startAt, now) : null;
+    const expiresAt = invoiceDue
+      ? invoiceDue.dueAt
+      : new Date(now.getTime() + PENDING_HOLD_MINUTES * 60 * 1000);
     const { data: bookingId, error: rpcError } = await db.rpc("create_pending_booking", {
       p_user_id: sessionUser?.id ?? null,
       p_venue_id: venue.id,
@@ -225,8 +226,9 @@ export async function POST(req: NextRequest) {
 
     // ===== 請求書払い（法人・銀行振込）フロー =====
     if (paymentMethod === "invoice") {
+      let invoiceId: string | null = null;
       try {
-        const { invoiceId, hostedInvoiceUrl } = await createAndSendInvoice({
+        const created = await createAndSendInvoice({
           bookingId,
           email,
           customerName: name,
@@ -235,7 +237,13 @@ export async function POST(req: NextRequest) {
           amount: breakdown.total,
           dueAt: expiresAt,
         });
-        await db
+        invoiceId = created.invoiceId;
+        const hostedInvoiceUrl = created.hostedInvoiceUrl;
+
+        // DB保存（stripe_invoice_id等）の失敗を必ず検査する。
+        // ここを無視すると「Stripeでは請求書送信済み・DBでは未紐付け」の孤立状態になり、
+        // 期限切れcronの対象外・入金Webhookは請求書ID不一致で自動確定不可になる。
+        const { error: saveError } = await db
           .from("bookings")
           .update({
             payment_method: "invoice",
@@ -243,10 +251,19 @@ export async function POST(req: NextRequest) {
             company_name: companyName,
             party_size: partySize,
             stripe_invoice_id: invoiceId,
+            stripe_invoice_customer_id: created.customerId,
             coupon_code: breakdown.coupon?.code ?? null,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", bookingId);
+          .eq("id", bookingId)
+          .eq("booking_status", "pending")
+          .select("id")
+          .single();
+        if (saveError) {
+          throw new Error(`請求書DB保存エラー: ${saveError.message}`);
+        }
+
+        const dueAtText = formatJstWeekdayDateTime(expiresAt);
         await sendAdminAlert(
           `請求書発行（入金待ち） ${venue.name}`,
           [
@@ -257,7 +274,7 @@ export async function POST(req: NextRequest) {
             `人数: ${partySize}名`,
             `メール: ${email}`,
             `金額: ¥${breakdown.total.toLocaleString()}`,
-            `支払期限: ${expiresAt.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`,
+            `支払期限: ${dueAtText}`,
             `予約ID: ${bookingId}`,
           ].join("\n")
         );
@@ -275,13 +292,15 @@ export async function POST(req: NextRequest) {
             `拠点: ${label}`,
             `会社: ${companyName}`,
             `金額: ¥${breakdown.total.toLocaleString()}`,
-            `お支払い期限: ${expiresAt.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`,
+            `お支払い期限: ${dueAtText}`,
             ``,
             hostedInvoiceUrl
               ? [`▼請求書（お振込先はこちらから確認できます）`, hostedInvoiceUrl].join("\n")
               : `請求書（お振込先記載）は別途Stripeよりメールでお送りしています。`,
             ``,
-            `お支払い期限までに入金が確認できない場合、本予約は自動的にキャンセルとなりますのでご注意ください。`,
+            `※お支払い期限は短めに設定されております。お早めのお振込をお願いいたします。`,
+            `お支払い期限までに入金が確認できない場合、本予約の仮押さえは自動的に解除されますのでご注意ください。`,
+            `※期限を過ぎてからのお振込は予約確定できず、ご返金の手続きとなる場合があります。`,
             ``,
             `ブルーステージ合同会社`,
           ].join("\n"),
@@ -294,6 +313,14 @@ export async function POST(req: NextRequest) {
         });
       } catch (e) {
         console.error("[checkout] 請求書発行失敗:", e);
+        // Stripeでは請求書が送信済みの可能性があるため、判明していればvoidを試みる（ベストエフォート）
+        if (invoiceId) {
+          try {
+            await voidInvoice(invoiceId);
+          } catch (voidErr) {
+            console.error("[checkout] 発行失敗後のvoid失敗:", voidErr);
+          }
+        }
         await db
           .from("bookings")
           .update({ booking_status: "expired", updated_at: new Date().toISOString() })
@@ -301,7 +328,14 @@ export async function POST(req: NextRequest) {
           .eq("booking_status", "pending");
         await sendAdminAlert(
           "🚨 請求書発行失敗",
-          `Stripe請求書の発行に失敗しました。銀行振込（customer_balance）がStripeで有効か確認してください。\nエラー: ${String(e)}`
+          [
+            `Stripe請求書の発行またはDB保存に失敗しました。`,
+            invoiceId
+              ? `Stripe側には請求書 ${invoiceId} が作成されていた可能性があります（void試行済み）。Stripeダッシュボードで確認してください。`
+              : `銀行振込（customer_balance）がStripeで有効か確認してください。`,
+            `予約ID: ${bookingId}`,
+            `エラー: ${String(e)}`,
+          ].join("\n")
         );
         return NextResponse.json(
           { error: "請求書の発行に失敗しました。お手数ですがカード決済をご利用いただくか、お問い合わせください" },
