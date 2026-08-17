@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import PurchaseTracker from "@/components/PurchaseTracker";
 import { getStripe } from "@/lib/stripe";
@@ -7,6 +8,15 @@ import { mapSearchUrl } from "@/lib/site-url";
 import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * 決済完了ページは検索結果に出す意味がないので noindex。
+ * ※robots.txt で Disallow してはいけない。クロールされないと noindex が読まれず、
+ *   Search Console で「robots.txt によりブロックされましたが、インデックスに登録しました」になる。
+ */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 type Result =
   | {
