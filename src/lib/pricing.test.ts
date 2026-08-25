@@ -77,8 +77,8 @@ describe("calcQuote オプション", () => {
   it("予約ごと/時間ごとの計算", () => {
     const q = calcQuote(venue, "2026-06-16", 10, 3, false, NOW, [projector, heater]);
     expect(q.options).toEqual([
-      { id: "p1", name: "プロジェクター", amount: 500 },
-      { id: "h1", name: "ヒーター", amount: 300 },
+      { id: "p1", name: "プロジェクター", amount: 500, unitPrice: 500, priceUnit: "per_booking" },
+      { id: "h1", name: "ヒーター", amount: 300, unitPrice: 100, priceUnit: "per_hour" },
     ]);
     expect(q.total).toBe(3000 + 800);
   });

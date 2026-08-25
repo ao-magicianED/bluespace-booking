@@ -3,6 +3,7 @@ import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
 import { updateBookingEventTime, type BookingEventDetails } from "./google-calendar";
 import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
+import { resolveChangeDayTypes, breakdownAfterDayTypeChange } from "./change-request";
 import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
 import type { PriceBreakdown } from "./pricing";
@@ -44,6 +45,15 @@ export async function applyApprovedTimeChange(params: {
   };
   if (amounts.newAmount !== currentEffective) {
     updates.adjusted_total = amounts.newAmount;
+  }
+  // 平日⇄土日祝をまたぐ変更なら、スナップショットの単価区分・単価・日付を新予約日基準へ更新
+  //（据え置くと、この予約を次に延長したとき旧dayTypeの単価で誤請求する）
+  try {
+    const dayTypes = await resolveChangeDayTypes(booking, start);
+    const newBreakdown = breakdownAfterDayTypeChange(booking, venue, dayTypes, start);
+    if (newBreakdown) updates.price_breakdown = newBreakdown;
+  } catch (e) {
+    console.error("[change-time] dayType解決失敗（スナップショットは据え置き）:", e);
   }
   // 増額分はここで初めて「実際に支払われた」ことが確定する（呼び出し元は決済完了後のみ
   // extraAmount>0で呼ぶ）。extra_paid_amountの加算はDB側の単一UPDATEで完結させ、

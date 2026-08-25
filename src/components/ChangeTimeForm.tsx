@@ -7,6 +7,8 @@ type Props = {
   currentStartIso: string;
   currentEndIso: string;
   pricePerHour: number;
+  /** 時間課金（per_hour）オプションの時間単価合計。延長見込み額に加算する */
+  perHourOptionRate?: number;
   minHours: number;
   maxHours: number;
   openHour: number;
@@ -38,6 +40,7 @@ export default function ChangeTimeForm({
   currentStartIso,
   currentEndIso,
   pricePerHour,
+  perHourOptionRate = 0,
   minHours,
   maxHours,
 }: Props) {
@@ -57,13 +60,16 @@ export default function ChangeTimeForm({
     ? (newEndMs - newStartMs) / (60 * 60 * 1000)
     : 0;
   const hoursDelta = newHours - prevHours;
-  const estimatedExtra = hoursDelta > 0 ? Math.round(pricePerHour * hoursDelta) : 0;
+  const estimatedExtra =
+    hoursDelta > 0 ? Math.round((pricePerHour + perHourOptionRate) * hoursDelta) : 0;
   const isExtend = hoursDelta > 0;
   const isShorten = hoursDelta < 0;
   const sameStart =
     Number.isFinite(newStartMs) &&
     new Date(currentStartIso).getTime() === newStartMs;
   const isShift = !sameStart;
+  // 日付が変わる変更は平日⇄土日祝の単価差額が発生しうる（正確な金額はサーバー側で計算）
+  const dateChanged = start.slice(0, 10) !== isoToJstInput(currentStartIso).slice(0, 10);
 
   async function submit() {
     setBusy(true);
@@ -150,6 +156,12 @@ export default function ChangeTimeForm({
               <br />
               追加お支払い見込み: ¥{estimatedExtra.toLocaleString()}（次の画面で決済）
               <br />
+              {dateChanged && (
+                <>
+                  ※平日⇄土日祝をまたぐ変更は単価差額も加算されます（正確な金額は決済画面に表示されます）
+                  <br />
+                </>
+              )}
               <span className="policy">最低{minHours}時間〜最大{maxHours}時間</span>
             </>
           )}
@@ -166,7 +178,9 @@ export default function ChangeTimeForm({
             <>
               <strong>時間ずらし</strong>
               <br />
-              管理者の承認が必要です。料金変動はありません。
+              {dateChanged
+                ? "平日⇄土日祝をまたぐ場合は単価差額のお支払い（決済画面へご案内）または差額返金が発生することがあります。"
+                : "管理者の承認が必要です。料金変動はありません。"}
             </>
           )}
         </div>

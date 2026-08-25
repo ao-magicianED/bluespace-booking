@@ -2,7 +2,9 @@ import { getDb } from "./supabase";
 import { getBusyRanges } from "./google-calendar";
 import { calcRefund } from "./cancellation";
 import { effectiveTotal } from "./adjustment";
-import { PENDING_GRACE_MINUTES } from "./slots";
+import { PENDING_GRACE_MINUTES, utcToJstDateStr } from "./slots";
+import { getHolidaySet, isHolidayDate } from "./holidays";
+import type { DayType } from "./pricing";
 import type { Booking, Venue } from "./types";
 
 /** お客様セルフ変更のカットオフ（利用開始の何時間前まで） */
@@ -123,100 +125,174 @@ export function validateTimeRange(
   return { ok: true };
 }
 
+export type ChangeDayTypes = { previous: DayType; next: DayType };
+
+/**
+ * 変更前後それぞれの日付の dayType（平日/土日祝）を解決する。
+ * - 変更前はスナップショット（price_breakdown.dayType）を最優先する。祝日テーブルが後から
+ *   変わっても「実際に請求した単価区分」と食い違わないようにするため。
+ * - 祝日テーブルはgetHolidaySetのfail-open方針（DB障害時は土日のみ判定）を踏襲する。
+ */
+export async function resolveChangeDayTypes(
+  booking: Booking,
+  nextStart: Date
+): Promise<ChangeDayTypes> {
+  const prevDateStr = utcToJstDateStr(new Date(booking.start_at));
+  const nextDateStr = utcToJstDateStr(nextStart);
+  const breakdown = (booking.price_breakdown ?? {}) as { dayType?: DayType };
+  const snapshotDayType =
+    breakdown.dayType === "weekday" || breakdown.dayType === "holiday" ? breakdown.dayType : null;
+
+  // 同一日内の変更（延長・短縮・同日ずらし）は単価区分が変わる余地がない
+  if (prevDateStr === nextDateStr) {
+    const dayType =
+      snapshotDayType ??
+      (isHolidayDate(prevDateStr, await getHolidaySet([prevDateStr])) ? "holiday" : "weekday");
+    return { previous: dayType, next: dayType };
+  }
+
+  const holidaySet = await getHolidaySet(
+    snapshotDayType ? [nextDateStr] : [prevDateStr, nextDateStr]
+  );
+  return {
+    previous:
+      snapshotDayType ?? (isHolidayDate(prevDateStr, holidaySet) ? "holiday" : "weekday"),
+    next: isHolidayDate(nextDateStr, holidaySet) ? "holiday" : "weekday",
+  };
+}
+
+/**
+ * 変更確定時のprice_breakdownスナップショット更新値を作る（dayTypeが変わらなければnull）。
+ * 平日→祝日へ変更確定した予約のスナップショットが旧dayType/旧単価のままだと、
+ * その予約を次に延長したとき旧平日単価で過小請求してしまうため、確定時に
+ * 単価区分・単価・日付だけ新しい予約日基準へ更新する。
+ * 変更履歴（元の請求根拠）はbooking_change_requestsが監査ログとして保持する。
+ */
+export function breakdownAfterDayTypeChange(
+  booking: Booking,
+  venue: Venue,
+  dayTypes: ChangeDayTypes,
+  nextStart: Date
+): Record<string, unknown> | null {
+  if (dayTypes.next === dayTypes.previous) return null;
+  const breakdown = (booking.price_breakdown ?? {}) as Record<string, unknown>;
+  const pricePerHour =
+    dayTypes.next === "holiday" && venue.holiday_hourly_price != null
+      ? venue.holiday_hourly_price
+      : venue.hourly_price;
+  return {
+    ...breakdown,
+    dayType: dayTypes.next,
+    pricePerHour,
+    date: utcToJstDateStr(nextStart),
+  };
+}
+
 /**
  * 時間変更の料金差額を計算する。
  * - 単価は予約時のスナップショット（price_breakdown.pricePerHour）を踏襲し、
- *   割引/クーポン/オプションは引き継ぐ前提で時間分のみ増減する。
- * - キャンセル料相当区間（cancel_fee_basis_atで判定）に入っている短縮は、料金を据え置く。
+ *   割引/クーポンは引き継ぐ前提で時間分のみ増減する。
+ * - 別日への変更で dayType（平日/土日祝）が変わる場合は、変更後の時間帯に
+ *   venue の現行単価（祝日は holiday_hourly_price）を適用して差額を取る。
+ * - 時間課金オプション（per_hour）はスナップショットの unitPrice を使って時間差分を
+ *   増減に含める。unitPrice が無い旧スナップショットは従来通り基本単価のみ（後方互換）。
+ * - キャンセル料相当区間（cancel_fee_basis_atで判定）に入っている短縮/減額は、料金を据え置く。
  */
 export function calcChangeAmounts(
   booking: Booking,
   venue: Venue,
   previous: { start: Date; end: Date },
   next: { start: Date; end: Date },
-  cancelFeeBasisAt: Date
+  cancelFeeBasisAt: Date,
+  dayTypes: ChangeDayTypes
 ): {
   newAmount: number;
   extraAmount: number;
   refundAmount: number;
   kind: ChangeKind;
   pricePerHour: number;
+  nextPricePerHour: number;
+  dayTypeChanged: boolean;
 } {
   const kind = classifyChange(previous, next);
-  const breakdown = (booking.price_breakdown ?? {}) as { pricePerHour?: number };
-  // 単価フォールバック: 価格スナップショットがなければ venue から逆算
+  const breakdown = (booking.price_breakdown ?? {}) as {
+    pricePerHour?: number;
+    options?: { unitPrice?: number; priceUnit?: string }[];
+  };
+  const venuePriceFor = (dayType: DayType): number =>
+    dayType === "holiday" && venue.holiday_hourly_price != null
+      ? venue.holiday_hourly_price
+      : venue.hourly_price;
+  // 単価フォールバック: 価格スナップショットがなければ venue の現行単価
   const pricePerHour = typeof breakdown.pricePerHour === "number"
     ? breakdown.pricePerHour
-    : venue.hourly_price;
+    : venuePriceFor(dayTypes.previous);
+  // dayTypeが変わらない限りスナップショット単価を維持（venueの値上げ/値下げは既存予約に波及させない）
+  const dayTypeChanged = dayTypes.next !== dayTypes.previous;
+  const nextPricePerHour = dayTypeChanged ? venuePriceFor(dayTypes.next) : pricePerHour;
+
+  // 時間課金オプションの時間単価合計（スナップショットにunitPriceがある新形式のみ）
+  const perHourOptionsRate = (breakdown.options ?? [])
+    .filter((o) => o?.priceUnit === "per_hour" && typeof o?.unitPrice === "number")
+    .reduce((sum, o) => sum + (o.unitPrice as number), 0);
 
   const prevHours = (previous.end.getTime() - previous.start.getTime()) / (60 * 60 * 1000);
   const nextHours = (next.end.getTime() - next.start.getTime()) / (60 * 60 * 1000);
-  const hoursDiff = nextHours - prevHours;
   const currentEffective = effectiveTotal(booking);
 
+  // 変更前後の「時間比例部分」（基本料金＋per_hourオプション）の純差額。
+  // 前後それぞれを円に丸めてから差を取る（差の一括丸めだと±0.5円で非対称になり、
+  // 延長→同じ時間だけ短縮したときに1円ずれる）
+  const prevCharge = Math.round((pricePerHour + perHourOptionsRate) * prevHours);
+  const nextCharge = Math.round((nextPricePerHour + perHourOptionsRate) * nextHours);
+  const diffAmount = nextCharge - prevCharge;
+
+  const base = { kind, pricePerHour, nextPricePerHour, dayTypeChanged };
+
   if (kind === "extend") {
-    const extra = Math.max(0, Math.round(pricePerHour * hoursDiff));
-    return {
-      newAmount: currentEffective + extra,
-      extraAmount: extra,
-      refundAmount: 0,
-      kind,
-      pricePerHour,
-    };
+    const extra = Math.max(0, diffAmount);
+    return { newAmount: currentEffective + extra, extraAmount: extra, refundAmount: 0, ...base };
   }
   if (kind === "shorten") {
     // キャンセルポリシー区間に入っているかで返金可否を判定
     const refundable = isWithinFullRefundWindow(venue, booking, cancelFeeBasisAt);
     if (!refundable) {
       // 有料区間: 短縮しても料金据え置き
-      return {
-        newAmount: currentEffective,
-        extraAmount: 0,
-        refundAmount: 0,
-        kind,
-        pricePerHour,
-      };
+      return { newAmount: currentEffective, extraAmount: 0, refundAmount: 0, ...base };
     }
-    const refund = Math.max(0, Math.round(pricePerHour * -hoursDiff));
+    // クーポン・調整で実効金額が単価×時間より低い予約もあるため、実効金額を返金上限にする
+    const refund = Math.min(currentEffective, Math.max(0, -diffAmount));
     return {
-      newAmount: Math.max(0, currentEffective - refund),
+      newAmount: currentEffective - refund,
       extraAmount: 0,
       refundAmount: refund,
-      kind,
-      pricePerHour,
+      ...base,
     };
   }
-  // shift: 時間総量が同じなら金額据え置き
-  if (Math.abs(hoursDiff) < 1e-6) {
-    return {
-      newAmount: currentEffective,
-      extraAmount: 0,
-      refundAmount: 0,
-      kind,
-      pricePerHour,
-    };
+  // shift: 時間総量も単価区分も同じなら金額据え置き
+  if (diffAmount === 0) {
+    return { newAmount: currentEffective, extraAmount: 0, refundAmount: 0, ...base };
   }
-  // shiftで時間総量も変わるケース（部分短縮＋部分延長）は、純差額として扱う
-  const diffAmount = Math.round(pricePerHour * hoursDiff);
+  // 時間総量の増減 or dayType変更による単価差は、純差額として扱う
   if (diffAmount > 0) {
     return {
       newAmount: currentEffective + diffAmount,
       extraAmount: diffAmount,
       refundAmount: 0,
-      kind,
-      pricePerHour,
+      ...base,
     };
   }
   const refundable = isWithinFullRefundWindow(venue, booking, cancelFeeBasisAt);
   if (!refundable) {
-    return { newAmount: currentEffective, extraAmount: 0, refundAmount: 0, kind, pricePerHour };
+    return { newAmount: currentEffective, extraAmount: 0, refundAmount: 0, ...base };
   }
+  // クーポン・調整で実効金額が単価×時間より低い予約もあるため、実効金額を返金上限にする
+  const refund = Math.min(currentEffective, -diffAmount);
   return {
-    newAmount: Math.max(0, currentEffective + diffAmount),
+    newAmount: currentEffective - refund,
     extraAmount: 0,
-    refundAmount: -diffAmount,
-    kind,
-    pricePerHour,
+    refundAmount: refund,
+    ...base,
   };
 }
 
