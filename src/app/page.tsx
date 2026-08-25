@@ -4,6 +4,9 @@ import Image from "next/image";
 import { getDb, isDbConfigured } from "@/lib/supabase";
 import { getVenueContent } from "@/content/venues";
 import { getReviewAggregates } from "@/lib/reviews-db";
+import { resolveTier } from "@/lib/entry-tier";
+import { resolveDayPricingBatch } from "@/lib/price-bands";
+import { minBandPrice } from "@/lib/pricing";
 import type { Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +63,10 @@ export default async function HomePage() {
 
   const list = (venues ?? []) as Venue[];
 
+  // 時間帯別料金の拠点は最低帯価格の「¥X〜」表示にする（帯なし拠点は従来表示）
+  const tier = await resolveTier();
+  const pricingMap = await resolveDayPricingBatch(list, tier);
+
   // 拠点一覧のItemList。Googleに「東京7拠点のレンタルスペースを束ねるサイト」だと伝える
   const itemListJsonLd = {
     "@context": "https://schema.org",
@@ -109,8 +116,15 @@ export default async function HomePage() {
       <div className="venue-grid">
         {list.map((v) => {
           const c = getVenueContent(v.slug);
-          const minPrice =
-            v.holiday_hourly_price != null && v.holiday_hourly_price < v.hourly_price
+          const dp = pricingMap.get(v.id);
+          const hasBands = dp && (dp.weekday.source === "bands" || dp.holiday.source === "bands");
+          const weekdayMin = hasBands ? minBandPrice(dp.weekday.bands) : v.hourly_price;
+          const holidayMin = hasBands
+            ? minBandPrice(dp.holiday.bands)
+            : (v.holiday_hourly_price ?? v.hourly_price);
+          const minPrice = hasBands
+            ? Math.min(weekdayMin, holidayMin)
+            : v.holiday_hourly_price != null && v.holiday_hourly_price < v.hourly_price
               ? v.holiday_hourly_price
               : v.hourly_price;
           return (
@@ -136,9 +150,11 @@ export default async function HomePage() {
                 {c && <p className="addr">🚉 {c.station}</p>}
                 {c && <p className="addr">👥 {c.capacityShort}</p>}
                 <p className="price">
-                  {v.holiday_hourly_price != null && v.holiday_hourly_price !== v.hourly_price
-                    ? `平日 ¥${v.hourly_price.toLocaleString()} / 土日祝 ¥${v.holiday_hourly_price.toLocaleString()}（1時間・税込）`
-                    : `¥${v.hourly_price.toLocaleString()} / 時間（税込）`}
+                  {hasBands
+                    ? `平日 ¥${weekdayMin.toLocaleString()}〜 / 土日祝 ¥${holidayMin.toLocaleString()}〜（1時間・税込）`
+                    : v.holiday_hourly_price != null && v.holiday_hourly_price !== v.hourly_price
+                      ? `平日 ¥${v.hourly_price.toLocaleString()} / 土日祝 ¥${v.holiday_hourly_price.toLocaleString()}（1時間・税込）`
+                      : `¥${v.hourly_price.toLocaleString()} / 時間（税込）`}
                 </p>
                 <p className="desc">{v.description}</p>
                 <span className="venue-card-cta">空き状況を見て予約</span>

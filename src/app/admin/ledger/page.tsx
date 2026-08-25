@@ -92,6 +92,7 @@ export default async function AdminLedgerPage({
               <th>会員No</th>
               <th>回数（確定 / 全体）</th>
               <th>人数</th>
+              <th>入口</th>
               <th>支払</th>
               <th>状態</th>
               <th>金額</th>
@@ -133,6 +134,7 @@ export default async function AdminLedgerPage({
                     )}
                   </td>
                   <td>{b.party_size != null ? `${b.party_size}名` : "—"}</td>
+                  <td>{b.price_tier === "repeat" ? "リピート" : "通常"}</td>
                   <td>{b.payment_method === "invoice" ? "請求書" : "カード"}</td>
                   <td>
                     <span className={`status-badge st-${b.booking_status}`}>
@@ -150,7 +152,7 @@ export default async function AdminLedgerPage({
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9}>該当する予約はありません。</td>
+                <td colSpan={10}>該当する予約はありません。</td>
               </tr>
             )}
           </tbody>

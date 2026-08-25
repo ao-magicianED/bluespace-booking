@@ -77,6 +77,8 @@ export type Booking = {
   review_token: string;
   /** レビュー依頼メールの送信済みフラグ（冪等化用） */
   review_request_sent_at: string | null;
+  /** 予約時の価格ティア（集計用・0022で追加。監査はprice_breakdown.tier側） */
+  price_tier: PriceTier;
 };
 
 export type AdjustmentType = "price_decrease" | "price_increase" | "cancel_fee_override";

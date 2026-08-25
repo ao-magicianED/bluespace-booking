@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AvailabilityResponse, DaySlots, VenueOption } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
+import PriceBandTable from "@/components/PriceBandTable";
 import { gaEvent } from "@/lib/gtag";
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
@@ -448,6 +449,8 @@ export default function BookingGrid({
           companyName,
           partySize,
           paymentMethod: effectivePayment,
+          // 画面に表示した合計。サーバーが再計算した額と不一致なら409で再見積になる
+          expectedTotal: quote?.total,
         }),
       });
       const json = await res.json();
@@ -504,6 +507,17 @@ export default function BookingGrid({
       {canceledNotice && (
         <div className="notice">
           決済が完了しなかったため、予約は確定していません。もう一度お手続きください。
+        </div>
+      )}
+      {/* repeatティアのご案内（R9: 取消線・%OFF・通常価格の併記は禁止。条件と絶対額のみ） */}
+      {data.pricing?.tier === "repeat" && (
+        <div className="notice">現地QR限定 リピーター価格でご案内中</div>
+      )}
+      {/* 時間帯別料金の帯表（帯あり拠点のみ） */}
+      {data.pricing && (
+        <div className="band-price-wrap">
+          <strong>時間帯別料金（1時間・税込）</strong>
+          <PriceBandTable weekday={data.pricing.weekday} holiday={data.pricing.holiday} />
         </div>
       )}
       {data.calendarError && (
@@ -578,7 +592,11 @@ export default function BookingGrid({
                     {!isMobile && DOW[d.dayOfWeek]}
                     {d.holidayName ? "・祝" : ""}
                   </span>
-                  <span className="day-price">¥{d.pricePerHour.toLocaleString()}/h</span>
+                  <span className="day-price">
+                    {data.pricing
+                      ? `¥${d.pricePerHour.toLocaleString()}〜`
+                      : `¥${d.pricePerHour.toLocaleString()}/h`}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -749,13 +767,25 @@ export default function BookingGrid({
               </div>
               {quote ? (
                 <div className="quote-lines">
-                  <div className="quote-line">
-                    <span>
-                      {quote.dayType === "holiday" ? "土日祝料金" : "平日料金"} ¥
-                      {quote.pricePerHour.toLocaleString()} × {formatDuration(quote.hours)}
-                    </span>
-                    <span>¥{quote.baseSubtotal.toLocaleString()}</span>
-                  </div>
+                  {quote.rule === "v3" && quote.bandLines ? (
+                    quote.bandLines.map((l) => (
+                      <div className="quote-line" key={l.label}>
+                        <span>
+                          {quote.dayType === "holiday" ? "土日祝" : "平日"} {l.label} ¥
+                          {l.pricePerHour.toLocaleString()} × {formatDuration(l.hours)}
+                        </span>
+                        <span>¥{l.amount.toLocaleString()}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="quote-line">
+                      <span>
+                        {quote.dayType === "holiday" ? "土日祝料金" : "平日料金"} ¥
+                        {quote.pricePerHour.toLocaleString()} × {formatDuration(quote.hours)}
+                      </span>
+                      <span>¥{quote.baseSubtotal.toLocaleString()}</span>
+                    </div>
+                  )}
                   {quote.discount && (
                     <div className="quote-line discount">
                       <span>
