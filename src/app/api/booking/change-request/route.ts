@@ -13,6 +13,7 @@ import {
   EXTEND_CHECKOUT_EXPIRY_SECONDS,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
+import { isBookingOwner } from "@/lib/booking-access";
 import { adminBookingUrl, myBookingUrl, siteUrl } from "@/lib/site-url";
 import type { Booking, Venue } from "@/lib/types";
 
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
     .select("*")
     .eq("id", bookingId)
     .maybeSingle<Booking>();
-  if (!booking || (booking.user_id !== user.id && booking.customer_email !== user.email)) {
+  if (!booking || !isBookingOwner(booking, user)) {
     return NextResponse.json({ error: "予約が見つかりません" }, { status: 404 });
   }
 

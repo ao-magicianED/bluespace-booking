@@ -3,7 +3,7 @@ import { getDb } from "@/lib/supabase";
 import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { getVenueBySlug } from "@/lib/availability";
 import { getBusyRanges } from "@/lib/google-calendar";
-import { buildQuote, QuoteError } from "@/lib/quote";
+import { buildQuote, checkCouponRestrictEmail, QuoteError } from "@/lib/quote";
 import { getSessionUser } from "@/lib/auth-server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { calcInvoiceDueAt, createAndSendInvoice, isInvoiceEligible } from "@/lib/invoice";
@@ -124,6 +124,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ログイン中ユーザー（本人専用クーポンの判定と、マイページ用の会員ID紐付けに使う。ゲスト予約はnull）
+    const sessionUser = await getSessionUser();
+
     // --- 価格計算（サーバー側。休日料金・割引・オプション・クーポン込み） ---
     let breakdown;
     try {
@@ -142,25 +145,19 @@ export async function POST(req: NextRequest) {
       }
       throw e;
     }
-    // 本人専用クーポン（自動配布分）は、宛先メールでの予約のみ許可。
-    // さらにログイン中の場合はログインメールとの一致も要求（他人のクーポンコードの流用を防ぐ）。
+    // 本人専用クーポン（自動配布分）はログイン必須とし、認証済みのログインメール一致のみで許可。
+    // 予約フォームの自由入力メールでは判定しない（コードと宛先を知る第三者の流用・枠の使い潰しを防ぐ）。
     if (breakdown.coupon) {
       const { data: couponRow } = await getDb()
         .from("coupons")
         .select("restrict_email")
         .ilike("code", breakdown.coupon.code)
         .maybeSingle<{ restrict_email: string | null }>();
-      const restrictEmail = couponRow?.restrict_email?.toLowerCase();
+      const restrictEmail = couponRow?.restrict_email;
       if (restrictEmail) {
-        const loginEmail = (await getSessionUser())?.email?.toLowerCase() ?? null;
-        const mismatch =
-          restrictEmail !== email.toLowerCase() ||
-          (loginEmail !== null && loginEmail !== restrictEmail);
-        if (mismatch) {
-          return NextResponse.json(
-            { error: "このクーポンはお届けした方ご本人さま専用です。クーポンが届いたメールアドレスでご予約ください" },
-            { status: 400 }
-          );
+        const couponError = checkCouponRestrictEmail(restrictEmail, sessionUser?.email);
+        if (couponError) {
+          return NextResponse.json({ error: couponError.message }, { status: couponError.status });
         }
       }
     }
@@ -181,8 +178,6 @@ export async function POST(req: NextRequest) {
     }
 
     // --- 仮押さえ作成（DB関数：期限切れ掃除→INSERTを同一トランザクションで） ---
-    // ログイン中ならマイページ用に会員IDを紐付ける（ゲスト予約はnull）
-    const sessionUser = await getSessionUser();
     const db = getDb();
     // カード=30分 / 請求書=支払期限まで枠を保持
     const expiresAt =

@@ -13,6 +13,28 @@ export class QuoteError extends Error {
 }
 
 /**
+ * 本人専用クーポン（restrict_email付き）の利用資格チェック。
+ * 予約フォームのメールは自由入力のため判定に使わず、ログイン済みの認証メール一致のみを認める
+ * （コードと宛先メールを知る第三者による流用や、max_uses枠の使い潰しを防ぐ）。
+ * @returns 利用不可ならQuoteError（呼び出し側でレスポンスに変換）、利用可ならnull
+ */
+export function checkCouponRestrictEmail(
+  restrictEmail: string,
+  loginEmail: string | null | undefined
+): QuoteError | null {
+  if (!loginEmail) {
+    return new QuoteError("このクーポンはログインしてご利用ください", 401);
+  }
+  if (loginEmail.toLowerCase() !== restrictEmail.toLowerCase()) {
+    return new QuoteError(
+      "このクーポンはお届けした方ご本人さま専用です。クーポンが届いたメールアドレスのアカウントでログインしてご利用ください",
+      403
+    );
+  }
+  return null;
+}
+
+/**
  * オプション・クーポンを検証して見積もりを作る。
  * /api/quote（表示用）と /api/checkout（決済用）の両方がこれを呼ぶため、
  * 画面に出る金額と請求額は必ず一致する。
