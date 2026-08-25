@@ -95,13 +95,13 @@ export default async function HomePage() {
           <span className="accent">そのまま予約。</span>
         </h1>
         <p>
-          ブルースペースの公式予約サイトです。仲介手数料がかからないため、いつでも最安値。
+          ブルースペースの公式予約サイトです。仲介手数料はかかりません。
           空き状況を見て、クレジットカードでそのまま予約が完了します。
         </p>
         <ul className="feature-chips">
           <li>🕐 30分単位で予約</li>
           <li>⚡ 開始直前まで受付</li>
-          <li>💴 当日予約10%OFF</li>
+          <li>🌙 24時間営業</li>
           <li>🧾 領収書発行OK</li>
         </ul>
       </section>

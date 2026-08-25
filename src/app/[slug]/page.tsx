@@ -328,7 +328,7 @@ export default async function VenuePage({
       <section className="venue-section" id="book">
         <h2>空き状況・ご予約</h2>
         <p className="policy">
-          公式サイトのご予約は仲介手数料がかからないため、いつでも最安値です。
+          公式サイトのご予約は仲介手数料がかかりません。
         </p>
         <BookingGrid venueSlug={venue.slug} initial={initial} options={options} initialForm={initialForm} isLoggedIn={!!user} />
         <details className="faq-item cancel-policy-box">
@@ -441,7 +441,7 @@ export default async function VenuePage({
             <h2>ご予約はこちら</h2>
             <p>
               空き状況を確認して、クレジットカードでそのまま予約できます。
-              当日予約は開始直前まで受付・10%OFF。
+              当日予約は開始直前まで受付。
             </p>
             <p>
               <a href="#book" className="hero-book-btn">
