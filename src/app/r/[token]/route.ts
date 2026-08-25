@@ -18,6 +18,8 @@ function withEntryHeaders(res: NextResponse): NextResponse {
  * venue_entry_tokens をDB照合（active=trueのみ）し、成立時のみ署名Cookieを発行して
  * 拠点ページへ302。不成立時はCookieを発行せずトップへ302（エラーは見せない）。
  * utm付与によりGA4（および今後の広告計測基盤）で入口分析ができる。
+ * utm_campaignで「現地QR経由」の流入全体を、utm_contentで拠点ごとの内訳を追える
+ * （venue_idがnullの全拠点共通トークンは"shared"）。
  */
 export async function GET(
   req: NextRequest,
@@ -40,18 +42,24 @@ export async function GET(
 
     // venue_idがnullなら全拠点共通トークン → トップへ
     let dest = "/";
+    let utmContent = "shared";
     if (row.venue_id) {
       const { data: venue } = await db
         .from("venues")
         .select("slug, active")
         .eq("id", row.venue_id)
         .maybeSingle<{ slug: string; active: boolean }>();
-      if (venue?.active && venue.slug) dest = `/${venue.slug}`;
+      if (venue?.active && venue.slug) {
+        dest = `/${venue.slug}`;
+        utmContent = venue.slug;
+      }
     }
 
     const url = new URL(dest, req.url);
     url.searchParams.set("utm_source", "qr");
     url.searchParams.set("utm_medium", "onsite");
+    url.searchParams.set("utm_campaign", "repeat-pricing");
+    url.searchParams.set("utm_content", utmContent);
     const res = withEntryHeaders(NextResponse.redirect(url, 302));
 
     const cookie = createPriceTierCookie(row.token, new Date());
