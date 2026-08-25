@@ -7,6 +7,7 @@ import {
   validateTimeRange,
   checkTimeSlotAvailable,
   calcChangeAmounts,
+  resolveChangeDayTypes,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
 import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
@@ -97,8 +98,13 @@ export async function POST(req: NextRequest) {
   if (!avail.ok) return NextResponse.json({ error: avail.reason }, { status: 409 });
 
   const now = new Date();
-  const amounts = calcChangeAmounts(booking, venue, previous, { start, end }, now);
+  // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）
+  const dayTypes = await resolveChangeDayTypes(booking, start);
+  const amounts = calcChangeAmounts(booking, venue, previous, { start, end }, now, dayTypes);
   const currentEffective = effectiveTotal(booking);
+  const dayTypeNote = amounts.dayTypeChanged
+    ? `単価変更: ${dayTypes.previous === "holiday" ? "土日祝" : "平日"}→${dayTypes.next === "holiday" ? "土日祝" : "平日"}（¥${amounts.pricePerHour.toLocaleString()}→¥${amounts.nextPricePerHour.toLocaleString()}/時）`
+    : null;
 
   // 監査ログ用 change_request 作成（admin_modify, approved として記録）
   const { data: cr, error: crErr } = await db
@@ -203,6 +209,7 @@ export async function POST(req: NextRequest) {
         `変更前: ${formatBookingPeriod(booking)}`,
         `変更後: ${period}`,
         `追加お支払い額: ¥${amounts.extraAmount.toLocaleString()}`,
+        dayTypeNote ? `※変更後の日付は${dayTypes.next === "holiday" ? "土日祝" : "平日"}料金（¥${amounts.nextPricePerHour.toLocaleString()}/時）となるため、単価差額を含みます` : null,
         `理由: ${reason}`,
         "",
         `▼お支払いはこちら`,
@@ -212,11 +219,16 @@ export async function POST(req: NextRequest) {
         "※期限を過ぎると変更は無効になります（元の時間のままです）。",
         "",
         "ブルーステージ合同会社",
-      ].join("\n"),
+      ].filter((line) => line !== null).join("\n"),
     });
     await sendAdminAlert(
       `予約時間変更（追加請求）${venue.name}`,
-      `${formatBookingPeriod(booking)} → ${period}\n追加¥${amounts.extraAmount.toLocaleString()}\nお客様にお支払いリンクを送信しました。`
+      [
+        `${formatBookingPeriod(booking)} → ${period}`,
+        `追加¥${amounts.extraAmount.toLocaleString()}`,
+        dayTypeNote,
+        "お客様にお支払いリンクを送信しました。",
+      ].filter((line) => line !== null).join("\n")
     );
     return NextResponse.json({
       ok: true,

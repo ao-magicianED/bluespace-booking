@@ -8,6 +8,7 @@ import {
   validateTimeRange,
   checkTimeSlotAvailable,
   calcChangeAmounts,
+  resolveChangeDayTypes,
   canSelfChange,
   classifyChange,
   EXTEND_CHECKOUT_EXPIRY_SECONDS,
@@ -105,9 +106,14 @@ export async function POST(req: NextRequest) {
   );
   if (!avail.ok) return NextResponse.json({ error: avail.reason }, { status: 409 });
 
-  const amounts = calcChangeAmounts(booking, venue, previous, { start, end }, now);
+  // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）
+  const dayTypes = await resolveChangeDayTypes(booking, start);
+  const amounts = calcChangeAmounts(booking, venue, previous, { start, end }, now, dayTypes);
   const kind = classifyChange(previous, { start, end });
   const currentEffective = effectiveTotal(booking);
+  const dayTypeNote = amounts.dayTypeChanged
+    ? `単価変更: ${dayTypes.previous === "holiday" ? "土日祝" : "平日"}→${dayTypes.next === "holiday" ? "土日祝" : "平日"}（¥${amounts.pricePerHour.toLocaleString()}→¥${amounts.nextPricePerHour.toLocaleString()}/時）`
+    : null;
 
   // change_request 作成（先にDB登録 → UNIQUE制約で他リクエスト排除）
   const isExtend = kind === "extend" || (kind === "shift" && amounts.extraAmount > 0);
@@ -159,7 +165,7 @@ export async function POST(req: NextRequest) {
                 currency: "jpy",
                 unit_amount: amounts.extraAmount,
                 product_data: {
-                  name: `予約延長 ${venue.name}`,
+                  name: kind === "extend" ? `予約延長 ${venue.name}` : `予約変更差額 ${venue.name}`,
                   description: `${oldPeriod} → ${newPeriod}`,
                 },
               },
@@ -197,8 +203,9 @@ export async function POST(req: NextRequest) {
           `変更前: ${oldPeriod}`,
           `変更後: ${newPeriod}`,
           `追加料金: ¥${amounts.extraAmount.toLocaleString()}`,
+          dayTypeNote,
           `理由: ${reason || "(なし)"}`,
-        ].join("\n")
+        ].filter((line) => line !== null).join("\n")
       );
 
       return NextResponse.json({
@@ -263,10 +270,11 @@ export async function POST(req: NextRequest) {
       `変更前: ${formatBookingPeriod(booking)}`,
       `変更後: ${formatBookingPeriod({ start_at: start.toISOString(), end_at: end.toISOString() })}`,
       amounts.refundAmount > 0 ? `差額返金見込み: ¥${amounts.refundAmount.toLocaleString()}` : `料金: 据え置き`,
+      dayTypeNote,
       `理由: ${reason || "(なし)"}`,
       "",
       `承認/却下: ${adminBookingUrl(bookingId)}`,
-    ].join("\n")
+    ].filter((line) => line !== null).join("\n")
   );
 
   return NextResponse.json({

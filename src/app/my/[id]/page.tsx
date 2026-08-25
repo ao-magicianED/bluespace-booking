@@ -73,8 +73,15 @@ export default async function BookingDetailPage({
     (c) => c.status === "pending" || c.status === "pending_payment"
   );
   const selfChangeOk = canSelfChange(booking, now);
-  const bdRule = (booking.price_breakdown ?? {}) as { pricePerHour?: number };
+  const bdRule = (booking.price_breakdown ?? {}) as {
+    pricePerHour?: number;
+    options?: { unitPrice?: number; priceUnit?: string }[];
+  };
   const pricePerHour = typeof bdRule.pricePerHour === "number" ? bdRule.pricePerHour : venue?.hourly_price ?? 0;
+  // 時間課金オプションの時間単価合計（延長見込み額の表示用・旧スナップショットは0）
+  const perHourOptionRate = (bdRule.options ?? [])
+    .filter((o) => o?.priceUnit === "per_hour" && typeof o?.unitPrice === "number")
+    .reduce((s, o) => s + (o.unitPrice as number), 0);
 
   // レビュー導線（利用終了後30日以内・未投稿の予約にだけ表示）
   const reviewEligible = isReviewEligible(booking, now);
@@ -238,6 +245,7 @@ export default async function BookingDetailPage({
               currentStartIso={booking.start_at}
               currentEndIso={booking.end_at}
               pricePerHour={pricePerHour}
+              perHourOptionRate={perHourOptionRate}
               minHours={venue.min_hours}
               maxHours={venue.max_hours}
               openHour={venue.open_hour}

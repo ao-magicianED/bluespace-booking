@@ -38,7 +38,14 @@ export type PriceBreakdown = {
   hours: number;
   baseSubtotal: number;
   discount: { kind: "last_minute" | "early_bird"; percent: number; amount: number } | null;
-  options: { id: string; name: string; amount: number }[];
+  /** unitPrice/priceUnitは時間変更時の差額再計算用スナップショット（2026-08以前の旧データには無い） */
+  options: {
+    id: string;
+    name: string;
+    amount: number;
+    unitPrice?: number;
+    priceUnit?: "per_booking" | "per_hour";
+  }[];
   optionsSubtotal: number;
   coupon: { code: string; amount: number } | null;
   total: number;
@@ -98,6 +105,8 @@ export function calcQuote(
     id: o.id,
     name: o.name,
     amount: o.price_unit === "per_hour" ? o.price * hours : o.price,
+    unitPrice: o.price,
+    priceUnit: o.price_unit,
   }));
   const optionsSubtotal = optionItems.reduce((s, o) => s + o.amount, 0);
 
