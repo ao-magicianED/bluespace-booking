@@ -75,6 +75,16 @@ export type Booking = {
   review_token: string;
   /** レビュー依頼メールの送信済みフラグ（冪等化用） */
   review_request_sent_at: string | null;
+  /** 広告アトリビューション（0021で追加）。どの広告クリックから来た予約か */
+  gclid?: string | null;
+  gbraid?: string | null;
+  wbraid?: string | null;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  landing_path?: string | null;
+  /** Google広告へオフラインコンバージョンを取り込んだ日時。nullなら未送信 */
+  conversion_exported_at?: string | null;
 };
 
 export type AdjustmentType = "price_decrease" | "price_increase" | "cancel_fee_override";

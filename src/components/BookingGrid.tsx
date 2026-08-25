@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AvailabilityResponse, DaySlots, VenueOption } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
 import { gaEvent } from "@/lib/gtag";
+import { attributionPayload } from "@/lib/attribution";
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -448,6 +449,8 @@ export default function BookingGrid({
           companyName,
           partySize,
           paymentMethod: effectivePayment,
+          // どの広告から来た予約かを決済と同時にサーバーへ渡す（欠測しない経路）
+          ...attributionPayload(),
         }),
       });
       const json = await res.json();

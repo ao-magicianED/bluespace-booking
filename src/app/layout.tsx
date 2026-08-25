@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import AuthNav from "@/components/AuthNav";
+import { Suspense } from "react";
+import AttributionCapture from "@/components/AttributionCapture";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import "./globals.css";
 
@@ -79,6 +81,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <p>© ブルーステージ合同会社</p>
           </div>
         </footer>
+        {/* 広告クリックIDの取得。useSearchParamsを使うためSuspenseで包む */}
+        <Suspense fallback={null}>
+          <AttributionCapture />
+        </Suspense>
         <GoogleAnalytics />
       </body>
     </html>
