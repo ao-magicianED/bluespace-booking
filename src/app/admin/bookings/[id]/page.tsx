@@ -169,6 +169,9 @@ export default async function AdminBookingDetailPage({
                     {bd.discount ? ` / 割引-¥${bd.discount.amount.toLocaleString()}` : ""}
                     {bd.coupon ? ` / クーポン${bd.coupon.code}-¥${bd.coupon.amount.toLocaleString()}` : ""}
                     {(bd.options ?? []).length > 0 ? ` / オプション+¥${bd.optionsSubtotal?.toLocaleString()}` : ""}
+                    {bd.changeAdjustment
+                      ? ` / 変更調整${bd.changeAdjustment.amount >= 0 ? "+" : ""}¥${bd.changeAdjustment.amount.toLocaleString()}`
+                      : ""}
                     ）
                   </span>
                 )}

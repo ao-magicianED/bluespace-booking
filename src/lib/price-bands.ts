@@ -5,7 +5,6 @@ import { JST_OFFSET_MS } from "./slots";
 import {
   bandsCoverFullDay,
   buildBandLines,
-  calcBandAmount,
   type DayType,
   type PriceBand,
   type PriceBreakdown,
@@ -217,61 +216,16 @@ function jstRangeHours(range: { start: Date; end: Date }): { startHour: number; 
   return { startHour, endHour };
 }
 
-/**
- * v3予約（時間帯別料金）の時間変更用に、変更前後の時間比例額を解決する。
- * v2予約（フラット）は null を返し、従来のスナップショット単価ロジックに委ねる。
- *
- * ポリシー: 変更後の時間帯全体を「元予約と同じtier・現在の帯表」で再計算し、
- * 変更前はスナップショット（実際に請求した基本料金）を基準に差額を取る。
- * 帯が変わっていなければ差額は「追加/削除されたスロットの現在価格」に一致する。
- *
- * @throws QuoteError(503) 帯設定が壊れている・DB読取失敗のとき（安値で変更させない）
- */
-export async function resolveBandChargeContext(
+/** v3スナップショットを、解決済みの帯表（resolved）から新しい時間帯で再構築する（純粋） */
+function buildV3Snapshot(
   booking: Booking,
-  venue: Venue,
-  next: { start: Date; end: Date },
-  dayTypes: ChangeDayTypes
-): Promise<BandChargeContext | null> {
-  const bd = (booking.price_breakdown ?? null) as Partial<PriceBreakdown> | null;
-  if (bd?.rule !== "v3") return null;
-
-  const tier: PriceTier = bd.tier === "repeat" ? "repeat" : "standard";
-  const resolved = await resolvePricing(venue, tier, dayTypes.next);
-  const { startHour, endHour } = jstRangeHours(next);
-  const nextBase = calcBandAmount(resolved.bands, startHour, endHour);
-  const prevBase =
-    typeof bd.baseSubtotal === "number"
-      ? bd.baseSubtotal
-      : (bd.bandLines ?? []).reduce((s, l) => s + l.amount, 0);
-  return { prevBase, nextBase };
-}
-
-/**
- * 時間変更確定時に適用するprice_breakdownスナップショット更新値を作る。
- * 【重要】この関数は「変更申請の作成時点」で呼び、結果を
- * booking_change_requests.new_price_breakdown に保存すること。確定（Webhook/承認）時に
- * 再解決すると、決済待ちの間に帯が変更された場合「請求した額」と「保存される内訳」が
- * 食い違い、次回変更で誤った差額を計算してしまう。
- * - v3予約: 帯構成が変わるため毎回、新しい時間帯の帯内訳で再構築する
- * - v2予約: 従来どおり dayType が変わったときだけ単価区分・単価・日付を更新
- * @returns 更新不要なら null
- */
-export async function buildBreakdownAfterChange(
-  booking: Booking,
-  venue: Venue,
+  bd: Partial<PriceBreakdown>,
+  resolved: ResolvedPricing,
   dayTypes: ChangeDayTypes,
   nextStart: Date,
-  nextEnd: Date
-): Promise<Record<string, unknown> | null> {
-  const bd = (booking.price_breakdown ?? null) as Partial<PriceBreakdown> | null;
-  if (bd?.rule !== "v3") {
-    return breakdownAfterDayTypeChange(booking, venue, dayTypes, nextStart);
-  }
-
-  const tier: PriceTier = bd.tier === "repeat" ? "repeat" : "standard";
-  const resolved = await resolvePricing(venue, tier, dayTypes.next);
-  const { startHour, endHour } = jstRangeHours({ start: nextStart, end: nextEnd });
+  startHour: number,
+  endHour: number
+): Record<string, unknown> {
   const bandLines = buildBandLines(resolved.bands, startHour, endHour);
   const baseSubtotal = bandLines.reduce((s, l) => s + l.amount, 0);
   const hours = Math.round((endHour - startHour) * 2) / 2;
@@ -284,7 +238,8 @@ export async function buildBreakdownAfterChange(
   );
   const optionsSubtotal = options.reduce((s, o) => s + o.amount, 0);
   // totalも内訳整合のため再構成する（割引・クーポン額は原予約時の確定額を据え置き）。
-  // 実際の請求額の正は bookings.adjusted_total / realizedRevenue 側であり、これは監査表示用
+  // 実際の請求額の正は bookings.adjusted_total / realizedRevenue 側であり、これは監査表示用。
+  // 実請求額と食い違う場合は finalizeChangeBreakdown が調整行を追加する
   const total = Math.max(
     0,
     baseSubtotal - (bd.discount?.amount ?? 0) + optionsSubtotal - (bd.coupon?.amount ?? 0)
@@ -303,4 +258,96 @@ export async function buildBreakdownAfterChange(
     pricePerHour: hours > 0 ? Math.round(baseSubtotal / hours) : 0,
     priceVersion: resolved.priceVersion,
   };
+}
+
+/**
+ * 予約時間変更の「差額計算用context」と「確定時に適用するスナップショット案」を
+ * 【同一の帯表読み取り1回】から作る。2回読むと、その間の帯置換で
+ * 「請求差額の根拠」と「保存する内訳」が食い違うレースが生じるため必ず同時に作る。
+ * v2予約は bandContext=null（従来のスナップショット単価ロジック）＋
+ * dayType変更時のみのスナップショット更新案を返す。
+ *
+ * ポリシー（v3）: 変更後の時間帯全体を「元予約と同じtier・現在の帯表」で再計算し、
+ * 変更前はスナップショット（実際に請求した基本料金）を基準に差額を取る。
+ * 帯が変わっていなければ差額は「追加/削除されたスロットの現在価格」に一致する。
+ *
+ * @throws QuoteError(503) 帯設定が壊れている・DB読取失敗のとき（安値で変更させない）
+ */
+export async function resolveChangeContext(
+  booking: Booking,
+  venue: Venue,
+  next: { start: Date; end: Date },
+  dayTypes: ChangeDayTypes
+): Promise<{
+  bandContext: BandChargeContext | null;
+  /** 確定時適用のスナップショット案。calcChangeAmounts後に finalizeChangeBreakdown を通すこと */
+  draftBreakdown: Record<string, unknown> | null;
+}> {
+  const bd = (booking.price_breakdown ?? null) as Partial<PriceBreakdown> | null;
+  if (bd?.rule !== "v3") {
+    return {
+      bandContext: null,
+      draftBreakdown: breakdownAfterDayTypeChange(booking, venue, dayTypes, next.start),
+    };
+  }
+
+  const tier: PriceTier = bd.tier === "repeat" ? "repeat" : "standard";
+  const resolved = await resolvePricing(venue, tier, dayTypes.next);
+  const { startHour, endHour } = jstRangeHours(next);
+  const draft = buildV3Snapshot(booking, bd, resolved, dayTypes, next.start, startHour, endHour);
+  const prevBase =
+    typeof bd.baseSubtotal === "number"
+      ? bd.baseSubtotal
+      : (bd.bandLines ?? []).reduce((s, l) => s + l.amount, 0);
+  return {
+    bandContext: { prevBase, nextBase: draft.baseSubtotal as number },
+    draftBreakdown: draft,
+  };
+}
+
+/**
+ * スナップショット案を実際の請求額（calcChangeAmountsのnewAmount）で確定させる。
+ * キャンセルポリシー有料区間の短縮（料金据え置き）や返金上限クランプでは、
+ * 再構成した明細合計と実請求額がずれるため、差分を調整行（changeAdjustment）として
+ * 明示し、totalを実請求額に合わせる（明細の足し算＝請求額の不変条件を守る）。
+ */
+export function finalizeChangeBreakdown(
+  draft: Record<string, unknown> | null,
+  newEffectiveAmount: number
+): Record<string, unknown> | null {
+  if (!draft || draft.rule !== "v3") return draft;
+  const recomputed = typeof draft.total === "number" ? draft.total : null;
+  if (recomputed == null || recomputed === newEffectiveAmount) return draft;
+  return {
+    ...draft,
+    changeAdjustment: {
+      amount: newEffectiveAmount - recomputed,
+      note: "時間変更時の調整（キャンセルポリシーによる料金据え置き等）",
+    },
+    total: newEffectiveAmount,
+  };
+}
+
+/**
+ * 時間変更確定時のスナップショット再計算フォールバック。
+ * 【原則使わない】新しい申請は resolveChangeContext + finalizeChangeBreakdown の結果を
+ * booking_change_requests.new_price_breakdown に保存し、確定時はそれを適用する。
+ * この関数は new_price_breakdown を持たない旧申請（本列導入前）の適用時のみ使う。
+ * @returns 更新不要なら null
+ */
+export async function buildBreakdownAfterChange(
+  booking: Booking,
+  venue: Venue,
+  dayTypes: ChangeDayTypes,
+  nextStart: Date,
+  nextEnd: Date
+): Promise<Record<string, unknown> | null> {
+  const bd = (booking.price_breakdown ?? null) as Partial<PriceBreakdown> | null;
+  if (bd?.rule !== "v3") {
+    return breakdownAfterDayTypeChange(booking, venue, dayTypes, nextStart);
+  }
+  const tier: PriceTier = bd.tier === "repeat" ? "repeat" : "standard";
+  const resolved = await resolvePricing(venue, tier, dayTypes.next);
+  const { startHour, endHour } = jstRangeHours({ start: nextStart, end: nextEnd });
+  return buildV3Snapshot(booking, bd, resolved, dayTypes, nextStart, startHour, endHour);
 }

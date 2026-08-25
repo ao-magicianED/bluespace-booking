@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calcChangeAmounts, type BandChargeContext, type ChangeDayTypes } from "./change-request";
+import { finalizeChangeBreakdown } from "./price-bands";
 import { calcBandAmount, type PriceBand } from "./pricing";
 import type { Booking, Venue } from "./types";
 
@@ -181,5 +182,33 @@ describe("calcChangeAmounts v3（帯価格）", () => {
       REFUNDABLE_BASIS, SAME_DAY, null
     );
     expect(r.extraAmount).toBe(1900);
+  });
+});
+
+describe("finalizeChangeBreakdown（明細＝請求額の不変条件）", () => {
+  const draft = { rule: "v3", total: 4000, baseSubtotal: 4000 } as Record<string, unknown>;
+
+  it("再構成totalと実請求額が一致すればそのまま（調整行なし）", () => {
+    const r = finalizeChangeBreakdown({ ...draft }, 4000)!;
+    expect(r.changeAdjustment).toBeUndefined();
+    expect(r.total).toBe(4000);
+  });
+
+  it("料金据え置き短縮（実請求 > 再構成total）は調整行を追加してtotalを請求額に合わせる", () => {
+    const r = finalizeChangeBreakdown({ ...draft }, 6000)!;
+    expect(r.total).toBe(6000);
+    expect((r.changeAdjustment as { amount: number }).amount).toBe(2000);
+  });
+
+  it("返金上限クランプ（実請求 < 再構成total）も同様に調整行で整合させる", () => {
+    const r = finalizeChangeBreakdown({ ...draft }, 3500)!;
+    expect(r.total).toBe(3500);
+    expect((r.changeAdjustment as { amount: number }).amount).toBe(-500);
+  });
+
+  it("v2のドラフト・nullはそのまま返す", () => {
+    const v2 = { rule: "v2", total: 4000 } as Record<string, unknown>;
+    expect(finalizeChangeBreakdown(v2, 6000)).toBe(v2);
+    expect(finalizeChangeBreakdown(null, 6000)).toBeNull();
   });
 });

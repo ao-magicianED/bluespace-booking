@@ -172,6 +172,13 @@ export default async function BookingDetailPage({
                         <br />
                       </>
                     )}
+                    {bd.changeAdjustment && (
+                      <>
+                        時間変更時の調整 {bd.changeAdjustment.amount >= 0 ? "+" : "-"}¥
+                        {Math.abs(bd.changeAdjustment.amount).toLocaleString()}
+                        <br />
+                      </>
+                    )}
                   </>
                 ) : null}
                 {booking.adjusted_total != null && booking.adjusted_total !== booking.total_amount ? (

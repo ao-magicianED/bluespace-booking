@@ -89,6 +89,11 @@ export type PriceBreakdown = {
   optionsSubtotal: number;
   coupon: { code: string; amount: number } | null;
   total: number;
+  /**
+   * 時間変更の確定時に、再構成した明細合計と実請求額がずれた場合の調整行
+   * （キャンセルポリシーによる料金据え置き・返金上限クランプ等。v3の変更後のみ）
+   */
+  changeAdjustment?: { amount: number; note: string };
 };
 
 /** JSTでの「今日から利用日まで何日先か」（同日=0） */

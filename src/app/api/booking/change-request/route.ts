@@ -14,7 +14,7 @@ import {
   EXTEND_CHECKOUT_EXPIRY_SECONDS,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
-import { buildBreakdownAfterChange, resolveBandChargeContext } from "@/lib/price-bands";
+import { finalizeChangeBreakdown, resolveChangeContext } from "@/lib/price-bands";
 import { QuoteError } from "@/lib/quote";
 import { isBookingOwner } from "@/lib/booking-access";
 import { adminBookingUrl, myBookingUrl, siteUrl } from "@/lib/site-url";
@@ -112,15 +112,12 @@ export async function POST(req: NextRequest) {
   // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）。
   // 祝日DB読取失敗・帯設定の破損時は変更を止める（fail-expensive。安値で変更させない）
   let dayTypes;
-  let bandContext;
-  let newBreakdown;
+  let changeCtx;
   try {
     dayTypes = await resolveChangeDayTypes(booking, start);
-    // v3予約（時間帯別料金）は現在の帯表で差額を計算
-    bandContext = await resolveBandChargeContext(booking, venue, { start, end }, dayTypes);
-    // 確定時に適用するスナップショットも申請時点で確定しておく
-    //（確定時に再解決すると決済待ち中の帯変更で請求額と内訳が食い違う）
-    newBreakdown = await buildBreakdownAfterChange(booking, venue, dayTypes, start, end);
+    // 差額計算contextと確定時適用スナップショット案を「同一の帯表読み取り」から作る
+    //（別々に読むと、その間の帯置換で請求額と保存内訳が食い違う）
+    changeCtx = await resolveChangeContext(booking, venue, { start, end }, dayTypes);
   } catch (e) {
     if (e instanceof QuoteError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
@@ -132,8 +129,10 @@ export async function POST(req: NextRequest) {
     );
   }
   const amounts = calcChangeAmounts(
-    booking, venue, previous, { start, end }, now, dayTypes, bandContext
+    booking, venue, previous, { start, end }, now, dayTypes, changeCtx.bandContext
   );
+  // 実請求額（据え置き・返金上限クランプ含む）で内訳を確定（明細＝請求額の不変条件）
+  const newBreakdown = finalizeChangeBreakdown(changeCtx.draftBreakdown, amounts.newAmount);
   const kind = classifyChange(previous, { start, end });
   const currentEffective = effectiveTotal(booking);
   const dayTypeNote = amounts.dayTypeChanged
