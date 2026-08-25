@@ -127,6 +127,11 @@ export type BookingChangeRequest = {
   extra_amount: number;
   /** 申請作成時刻スナップショット（キャンセル料計算の基準） */
   cancel_fee_basis_at: string;
+  /**
+   * 変更確定時に適用するprice_breakdown（申請時点の帯表・単価で確定済み。0022で追加）。
+   * null=更新不要（v2のdayType不変）または旧申請（適用時に再計算フォールバック）
+   */
+  new_price_breakdown: unknown | null;
   status: ChangeRequestStatus;
   stripe_session_id: string | null;
   stripe_payment_intent_id: string | null;

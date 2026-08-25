@@ -10,7 +10,7 @@ import {
   resolveChangeDayTypes,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
-import { resolveBandChargeContext } from "@/lib/price-bands";
+import { buildBreakdownAfterChange, resolveBandChargeContext } from "@/lib/price-bands";
 import { QuoteError } from "@/lib/quote";
 import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { siteUrl } from "@/lib/site-url";
@@ -100,17 +100,22 @@ export async function POST(req: NextRequest) {
   if (!avail.ok) return NextResponse.json({ error: avail.reason }, { status: 409 });
 
   const now = new Date();
-  // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）
-  const dayTypes = await resolveChangeDayTypes(booking, start);
-  // v3予約（時間帯別料金）は現在の帯表で差額を計算。帯設定が壊れているときは変更を止める
+  // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）。
+  // 祝日DB読取失敗・帯設定の破損時は変更を止める（fail-expensive。安値で変更させない）
+  let dayTypes;
   let bandContext;
+  let newBreakdown;
   try {
+    dayTypes = await resolveChangeDayTypes(booking, start);
+    // v3予約（時間帯別料金）は現在の帯表で差額を計算
     bandContext = await resolveBandChargeContext(booking, venue, { start, end }, dayTypes);
+    // 確定時に適用するスナップショットも申請時点で確定しておく
+    newBreakdown = await buildBreakdownAfterChange(booking, venue, dayTypes, start, end);
   } catch (e) {
     if (e instanceof QuoteError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
-    console.error("[admin/change-time] 帯価格の解決失敗:", e);
+    console.error("[admin/change-time] 料金解決失敗:", e);
     return NextResponse.json(
       { error: "料金の計算に失敗しました。時間をおいてお試しください" },
       { status: 503 }
@@ -143,6 +148,7 @@ export async function POST(req: NextRequest) {
       reason,
       decided_at: now.toISOString(),
       decided_by: "admin",
+      new_price_breakdown: newBreakdown,
     })
     .select("id")
     .single();
@@ -266,6 +272,7 @@ export async function POST(req: NextRequest) {
     amounts,
     reason,
     changeRequestId: (cr as { id: string }).id,
+    newBreakdown,
   });
   if (!applyResult.ok) {
     const status = applyResult.reason === "slot_conflict" ? 409 : 500;

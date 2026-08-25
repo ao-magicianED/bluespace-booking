@@ -36,9 +36,10 @@ type CheckoutBody = {
   partySize?: number;
   paymentMethod?: string; // card | invoice
   /**
-   * 画面に表示した合計金額。サーバーは価格の権威としては一切使わず、
-   * 再計算した合計と一致しないときだけ409を返して再見積させる
+   * 画面に表示した合計金額（必須）。サーバーは価格の権威としては一切使わず、
+   * 再計算した合計と一致しないときは409を返して再見積させる
    * （管理者が料金を変更した瞬間に決済した利用者が、表示と違う金額で請求される事故を防ぐ）。
+   * 省略で整合チェックを迂回できないよう、非負整数でなければ400。
    */
   expectedTotal?: number;
 };
@@ -91,6 +92,17 @@ export async function POST(req: NextRequest) {
   }
   if (paymentMethod === "invoice" && customerType !== "corporate") {
     return NextResponse.json({ error: "請求書払いは法人のお客様向けです" }, { status: 400 });
+  }
+  // 表示額の同意確認は必須（省略で迂回させない）。古い画面からの送信は再読み込みを促す
+  if (
+    typeof body.expectedTotal !== "number" ||
+    !Number.isInteger(body.expectedTotal) ||
+    body.expectedTotal < 0
+  ) {
+    return NextResponse.json(
+      { error: "画面の情報が古い可能性があります。ページを再読み込みして、もう一度お手続きください" },
+      { status: 400 }
+    );
   }
 
   try {
@@ -156,7 +168,7 @@ export async function POST(req: NextRequest) {
       throw e;
     }
     // 表示額と再計算額の整合チェック（見積→決済の間に料金が変わっていたら再見積させる）
-    if (typeof body.expectedTotal === "number" && body.expectedTotal !== breakdown.total) {
+    if (body.expectedTotal !== breakdown.total) {
       return NextResponse.json(
         { error: "価格が更新されました。金額をご確認のうえ、もう一度お手続きください" },
         { status: 409 }

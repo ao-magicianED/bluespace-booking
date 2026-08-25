@@ -33,7 +33,7 @@ vi.mock("./supabase", () => ({
 
 import { createPriceTierCookie, resolveTier, verifyPriceTierCookieValue } from "./entry-tier";
 
-const SECRET = "test-secret-for-price-tier";
+const SECRET = "test-secret-for-price-tier-0123456789abcdef"; // 32文字以上（最低長要件）
 const TOKEN = "12345678-1234-1234-1234-123456789abc";
 const NOW = new Date("2026-09-01T00:00:00Z");
 
@@ -136,6 +136,14 @@ describe("resolveTier（毎回DB照合＝キルスイッチ）", () => {
   it("シークレット未設定 → standard", async () => {
     h.cookieValue = createPriceTierCookie(TOKEN, new Date())!.value;
     delete process.env.PRICE_TIER_COOKIE_SECRET;
+    h.dbResult = { data: { active: true }, error: null };
+    expect(await resolveTier()).toBe("standard");
+  });
+
+  it("短すぎるシークレット（32文字未満）は鍵として扱わない → Cookie発行されずstandard", async () => {
+    h.cookieValue = createPriceTierCookie(TOKEN, new Date())!.value; // 正規鍵で発行済みの想定
+    process.env.PRICE_TIER_COOKIE_SECRET = "short-key";
+    expect(createPriceTierCookie(TOKEN, new Date())).toBeNull();
     h.dbResult = { data: { active: true }, error: null };
     expect(await resolveTier()).toBe("standard");
   });

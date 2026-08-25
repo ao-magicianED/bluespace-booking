@@ -74,6 +74,14 @@ alter table bookings add column if not exists price_tier text not null default '
   check (price_tier in ('standard', 'repeat'));
 
 -- ---------------------------------------------------------------
+-- 時間変更の確定時に適用する price_breakdown スナップショット。
+-- 申請時点の帯表で内訳を確定して保存し、確定（Webhook/承認）時はこれを適用する
+-- （確定時に帯表を再解決すると、決済待ちの間の帯変更で「請求額と保存内訳の不一致」が生じるため）。
+-- null = スナップショット更新不要（v2予約のdayType不変の変更）または本列導入前の旧申請。
+-- ---------------------------------------------------------------
+alter table booking_change_requests add column if not exists new_price_breakdown jsonb;
+
+-- ---------------------------------------------------------------
 -- 帯の全置換RPC（管理API・シード投入の唯一の入口。1トランザクション）。
 -- 検証: 0-24完全被覆（重複なし）・両tier存在・10円単位・standard>=repeat。
 -- 置換前の帯は venue_price_band_audits へ退避する。

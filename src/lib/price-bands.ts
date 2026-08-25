@@ -209,6 +209,11 @@ function jstRangeHours(range: { start: Date; end: Date }): { startHour: number; 
   const endRaw = jstHourOfDay(range.end);
   // 同日内利用前提（validateTimeRangeが保証）。終了0:00は同日の24時として扱う
   const endHour = endRaw === 0 ? 24 : endRaw;
+  if (endHour <= startHour) {
+    // 日またぎの範囲を時刻だけで計算すると空範囲＝基本料金0円になり無料利用・過大返金の
+    // 事故になるため、防御的に停止する（入口はvalidateTimeRangeの同日チェックが防ぐ）
+    throw new Error(`日をまたぐ時間範囲は帯計算できません (start=${startHour}, end=${endHour})`);
+  }
   return { startHour, endHour };
 }
 
@@ -243,9 +248,12 @@ export async function resolveBandChargeContext(
 }
 
 /**
- * 時間変更確定時のprice_breakdownスナップショット更新値を作る。
+ * 時間変更確定時に適用するprice_breakdownスナップショット更新値を作る。
+ * 【重要】この関数は「変更申請の作成時点」で呼び、結果を
+ * booking_change_requests.new_price_breakdown に保存すること。確定（Webhook/承認）時に
+ * 再解決すると、決済待ちの間に帯が変更された場合「請求した額」と「保存される内訳」が
+ * 食い違い、次回変更で誤った差額を計算してしまう。
  * - v3予約: 帯構成が変わるため毎回、新しい時間帯の帯内訳で再構築する
- *   （据え置くと次の延長・変更で旧帯構成から誤った差額を計算してしまう）
  * - v2予約: 従来どおり dayType が変わったときだけ単価区分・単価・日付を更新
  * @returns 更新不要なら null
  */
@@ -268,6 +276,19 @@ export async function buildBreakdownAfterChange(
   const baseSubtotal = bandLines.reduce((s, l) => s + l.amount, 0);
   const hours = Math.round((endHour - startHour) * 2) / 2;
   const jstDate = new Date(nextStart.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10);
+  // per_hourオプションの金額も新しい時間数で再計算する（据え置くと明細の合計が合わなくなる）
+  const options = (bd.options ?? []).map((o) =>
+    o.priceUnit === "per_hour" && typeof o.unitPrice === "number"
+      ? { ...o, amount: Math.round(o.unitPrice * hours) }
+      : o
+  );
+  const optionsSubtotal = options.reduce((s, o) => s + o.amount, 0);
+  // totalも内訳整合のため再構成する（割引・クーポン額は原予約時の確定額を据え置き）。
+  // 実際の請求額の正は bookings.adjusted_total / realizedRevenue 側であり、これは監査表示用
+  const total = Math.max(
+    0,
+    baseSubtotal - (bd.discount?.amount ?? 0) + optionsSubtotal - (bd.coupon?.amount ?? 0)
+  );
   return {
     ...(booking.price_breakdown as Record<string, unknown>),
     dayType: dayTypes.next,
@@ -275,6 +296,9 @@ export async function buildBreakdownAfterChange(
     hours,
     bandLines,
     baseSubtotal,
+    options,
+    optionsSubtotal,
+    total,
     // 互換用の加重平均（表示専用）
     pricePerHour: hours > 0 ? Math.round(baseSubtotal / hours) : 0,
     priceVersion: resolved.priceVersion,

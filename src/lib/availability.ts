@@ -2,6 +2,7 @@ import { getDb } from "./supabase";
 import { getBusyRanges } from "./google-calendar";
 import { addDaysJst, buildDays, jstToUtc, jstDayOfWeek, PENDING_GRACE_MINUTES } from "./slots";
 import { resolveDayPricing } from "./price-bands";
+import { QuoteError } from "./quote";
 import { minBandPrice, type PriceTier } from "./pricing";
 import type { AvailabilityResponse, TimeRange, Venue } from "./types";
 
@@ -75,13 +76,19 @@ export async function getAvailability(
     calendarError = true;
   }
 
-  // 祝日（jp_holidays）を取得して日ごとの料金種別を決める
+  // 祝日（jp_holidays）を取得して日ごとの料金種別を決める。
+  // 読取失敗のまま平日価格を表示すると、見積（strict判定で503停止）と食い違う
+  // 安値表示になるため、空き状況の表示ごと停止する（fail-expensive）
   const dateList: string[] = [];
   for (let i = 0; i < numDays; i++) dateList.push(addDaysJst(fromDate, i));
-  const { data: holidayRows } = await db
+  const { data: holidayRows, error: holidayError } = await db
     .from("jp_holidays")
     .select("date, name")
     .in("date", dateList);
+  if (holidayError) {
+    console.error("[availability] 祝日取得エラー（表示を停止）:", holidayError.message);
+    throw new QuoteError("空き状況の取得に失敗しました。時間をおいてお試しください", 503);
+  }
   const holidayNames = new Map((holidayRows ?? []).map((r) => [r.date as string, r.name as string]));
 
   const days = buildDays(

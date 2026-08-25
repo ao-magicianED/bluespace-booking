@@ -22,13 +22,25 @@ const MAX_EXP_DAYS = 91;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** HMAC鍵の最低長。CookieにHMACの既知平文・署名ペアが露出するため、短い鍵は辞書攻撃可能 */
+const MIN_SECRET_LENGTH = 32;
+
 /** __Host- プレフィックスはSecure必須のため、ローカル開発（http）のみ接頭辞なしに落とす */
 export function priceTierCookieName(): string {
   return process.env.NODE_ENV === "production" ? "__Host-bs_pt" : "bs_pt";
 }
 
 function secret(): string | null {
-  return process.env.PRICE_TIER_COOKIE_SECRET || null;
+  const s = process.env.PRICE_TIER_COOKIE_SECRET || "";
+  if (!s) return null;
+  if (s.length < MIN_SECRET_LENGTH) {
+    // 弱い鍵で運用するより、repeat価格を無効化（＝全員standard）する方が安全
+    console.error(
+      `[entry-tier] PRICE_TIER_COOKIE_SECRET が短すぎます（${MIN_SECRET_LENGTH}文字以上必須）。repeat価格を無効化します`
+    );
+    return null;
+  }
+  return s;
 }
 
 function sign(token: string, exp: number, key: string): string {
