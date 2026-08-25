@@ -29,6 +29,11 @@ describe("isBookingOwner ゲスト予約（user_id なし）", () => {
     expect(isBookingOwner(guestBooking, { id: "user-2", email: "other@example.com" })).toBe(false);
   });
 
+  it("大文字小文字・前後空白の表記ゆれは同一メールとみなす", () => {
+    const booking = { user_id: null, customer_email: "Guest@Example.com " };
+    expect(isBookingOwner(booking, { id: "user-2", email: "guest@example.com" })).toBe(true);
+  });
+
   it("メール未設定のユーザーは操作できない", () => {
     expect(isBookingOwner(guestBooking, { id: "user-2" })).toBe(false);
     expect(isBookingOwner(guestBooking, { id: "user-2", email: null })).toBe(false);

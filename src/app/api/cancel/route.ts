@@ -4,6 +4,7 @@ import { getDb } from "@/lib/supabase";
 import { calcRefund } from "@/lib/cancellation";
 import { executeCancellation } from "@/lib/cancel-booking";
 import { effectiveTotal } from "@/lib/adjustment";
+import { isBookingOwner } from "@/lib/booking-access";
 import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     .select("*")
     .eq("id", bookingId)
     .maybeSingle<Booking>();
-  if (!booking || (booking.user_id !== user.id && booking.customer_email !== user.email)) {
+  if (!booking || !isBookingOwner(booking, user)) {
     return NextResponse.json({ error: "予約が見つかりません" }, { status: 404 });
   }
   if (booking.booking_status !== "confirmed" || booking.payment_status !== "paid") {

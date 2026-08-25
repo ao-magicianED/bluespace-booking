@@ -25,7 +25,7 @@ export function checkCouponRestrictEmail(
   if (!loginEmail) {
     return new QuoteError("このクーポンはログインしてご利用ください", 401);
   }
-  if (loginEmail.toLowerCase() !== restrictEmail.toLowerCase()) {
+  if (loginEmail.trim().toLowerCase() !== restrictEmail.trim().toLowerCase()) {
     return new QuoteError(
       "このクーポンはお届けした方ご本人さま専用です。クーポンが届いたメールアドレスのアカウントでログインしてご利用ください",
       403

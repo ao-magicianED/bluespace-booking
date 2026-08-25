@@ -148,11 +148,18 @@ export async function POST(req: NextRequest) {
     // 本人専用クーポン（自動配布分）はログイン必須とし、認証済みのログインメール一致のみで許可。
     // 予約フォームの自由入力メールでは判定しない（コードと宛先を知る第三者の流用・枠の使い潰しを防ぐ）。
     if (breakdown.coupon) {
-      const { data: couponRow } = await getDb()
+      const { data: couponRow, error: couponFetchError } = await getDb()
         .from("coupons")
         .select("restrict_email")
         .ilike("code", breakdown.coupon.code)
         .maybeSingle<{ restrict_email: string | null }>();
+      // 取得失敗時に本人確認が素通りしないようfail closed
+      if (couponFetchError) {
+        return NextResponse.json(
+          { error: "クーポンの確認に失敗しました。時間をおいてお試しください" },
+          { status: 503 }
+        );
+      }
       const restrictEmail = couponRow?.restrict_email;
       if (restrictEmail) {
         const couponError = checkCouponRestrictEmail(restrictEmail, sessionUser?.email);

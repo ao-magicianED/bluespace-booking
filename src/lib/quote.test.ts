@@ -17,8 +17,9 @@ describe("checkCouponRestrictEmail（本人専用クーポン）", () => {
     expect(checkCouponRestrictEmail("member@example.com", "member@example.com")).toBeNull();
   });
 
-  it("大文字小文字の違いは無視する", () => {
+  it("大文字小文字・前後空白の違いは無視する", () => {
     expect(checkCouponRestrictEmail("Member@Example.com", "member@example.com")).toBeNull();
+    expect(checkCouponRestrictEmail(" member@example.com ", "member@example.com")).toBeNull();
   });
 
   it("宛先と違うアカウントは拒否（403）", () => {

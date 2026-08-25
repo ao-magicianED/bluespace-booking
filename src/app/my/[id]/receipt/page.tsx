@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-server";
 import { getDb } from "@/lib/supabase";
 import { formatBookingPeriod } from "@/lib/confirm";
+import { isBookingOwner } from "@/lib/booking-access";
 import ReceiptClient from "@/components/ReceiptClient";
 import type { Booking, Venue } from "@/lib/types";
 
@@ -16,7 +17,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
   const db = getDb();
   const { data: booking } = await db.from("bookings").select("*").eq("id", id).maybeSingle<Booking>();
   if (!booking) notFound();
-  if (booking.user_id !== user.id && booking.customer_email !== user.email) notFound();
+  if (!isBookingOwner(booking, user)) notFound();
   if (booking.booking_status !== "confirmed" || booking.payment_status !== "paid") notFound();
 
   const { data: venue } = await db

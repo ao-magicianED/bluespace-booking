@@ -11,5 +11,7 @@ export function isBookingOwner(
   user: { id: string; email?: string | null }
 ): boolean {
   if (booking.user_id) return booking.user_id === user.id;
-  return Boolean(user.email) && booking.customer_email === user.email;
+  if (!user.email) return false;
+  // フォーム自由入力と認証メールの表記ゆれ（大文字小文字・前後空白）は同一とみなす
+  return booking.customer_email.trim().toLowerCase() === user.email.trim().toLowerCase();
 }
