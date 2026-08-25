@@ -20,12 +20,13 @@ export default async function MyPage() {
   if (!user) redirect("/login");
 
   const db = getDb();
-  // 会員予約（user_id一致）＋同じメールで行ったゲスト予約をまとめて表示
+  // 会員予約（user_id一致）＋同じメールで行ったゲスト予約（user_idなし）をまとめて表示
+  //（他会員の予約が連絡先メール一致だけで混ざらないよう、メール一致はゲスト予約に限定）
   const [{ data: bookings, error }, { data: member }] = await Promise.all([
     db
       .from("bookings")
       .select("*, venues(name)")
-      .or(`user_id.eq.${user.id},customer_email.eq.${user.email}`)
+      .or(`user_id.eq.${user.id},and(user_id.is.null,customer_email.eq.${user.email})`)
       .in("booking_status", ["pending", "confirmed", "cancelled"])
       .order("start_at", { ascending: false })
       .limit(50),

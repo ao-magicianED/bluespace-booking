@@ -8,6 +8,7 @@ import { effectiveTotal } from "@/lib/adjustment";
 import CancelBookingButton from "@/components/CancelBookingButton";
 import ChangeTimeForm from "@/components/ChangeTimeForm";
 import { canSelfChange } from "@/lib/change-request";
+import { isBookingOwner } from "@/lib/booking-access";
 import { isReviewEligible } from "@/lib/reviews";
 import type { Booking, BookingAdjustment, BookingChangeRequest, Venue } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
@@ -32,8 +33,8 @@ export default async function BookingDetailPage({
   const db = getDb();
   const { data: booking } = await db.from("bookings").select("*").eq("id", id).maybeSingle<Booking>();
   if (!booking) notFound();
-  // 本人確認: 会員IDか、登録メールと予約メールの一致
-  if (booking.user_id !== user.id && booking.customer_email !== user.email) notFound();
+  // 本人確認: 会員予約は会員IDのみ、ゲスト予約は認証メール一致
+  if (!isBookingOwner(booking, user)) notFound();
 
   const { data: venue } = await db
     .from("venues")
