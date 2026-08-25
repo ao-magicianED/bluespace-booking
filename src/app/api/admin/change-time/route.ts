@@ -10,6 +10,8 @@ import {
   resolveChangeDayTypes,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
+import { resolveBandChargeContext } from "@/lib/price-bands";
+import { QuoteError } from "@/lib/quote";
 import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { siteUrl } from "@/lib/site-url";
 import { applyApprovedTimeChange } from "@/lib/apply-time-change";
@@ -100,7 +102,23 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）
   const dayTypes = await resolveChangeDayTypes(booking, start);
-  const amounts = calcChangeAmounts(booking, venue, previous, { start, end }, now, dayTypes);
+  // v3予約（時間帯別料金）は現在の帯表で差額を計算。帯設定が壊れているときは変更を止める
+  let bandContext;
+  try {
+    bandContext = await resolveBandChargeContext(booking, venue, { start, end }, dayTypes);
+  } catch (e) {
+    if (e instanceof QuoteError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    console.error("[admin/change-time] 帯価格の解決失敗:", e);
+    return NextResponse.json(
+      { error: "料金の計算に失敗しました。時間をおいてお試しください" },
+      { status: 503 }
+    );
+  }
+  const amounts = calcChangeAmounts(
+    booking, venue, previous, { start, end }, now, dayTypes, bandContext
+  );
   const currentEffective = effectiveTotal(booking);
   const dayTypeNote = amounts.dayTypeChanged
     ? `単価変更: ${dayTypes.previous === "holiday" ? "土日祝" : "平日"}→${dayTypes.next === "holiday" ? "土日祝" : "平日"}（¥${amounts.pricePerHour.toLocaleString()}→¥${amounts.nextPricePerHour.toLocaleString()}/時）`

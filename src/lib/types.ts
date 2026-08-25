@@ -1,3 +1,5 @@
+import type { PriceBand, PriceTier } from "./pricing";
+
 export type Venue = {
   id: string;
   slug: string;
@@ -146,11 +148,19 @@ export type DaySlots = {
   dayOfWeek: number;
   /** weekday=平日 / holiday=土日祝 */
   dayType: "weekday" | "holiday";
-  /** この日の時給（円） */
+  /** この日の時給（円）。時間帯別料金の拠点では「その日の最低帯価格」（表示は¥X〜） */
   pricePerHour: number;
   /** 祝日名（祝日のみ） */
   holidayName?: string;
   slots: { hour: number; status: SlotStatus }[];
+};
+
+/** 時間帯別料金が設定されている拠点のみ付与される料金表（帯なし拠点では省略） */
+export type AvailabilityPricing = {
+  /** このレスポンスに適用された価格ティア（repeatならリピーター価格バッジを表示） */
+  tier: PriceTier;
+  weekday: PriceBand[];
+  holiday: PriceBand[];
 };
 
 export type AvailabilityResponse = {
@@ -168,4 +178,6 @@ export type AvailabilityResponse = {
   days: DaySlots[];
   /** FreeBusy取得に失敗した場合true（fail closed: 全枠closed表示） */
   calendarError: boolean;
+  /** 時間帯別料金の帯表（帯なし拠点では省略＝従来レスポンスと同一） */
+  pricing?: AvailabilityPricing;
 };

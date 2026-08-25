@@ -3,6 +3,7 @@ import { getDb } from "@/lib/supabase";
 import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { getVenueBySlug } from "@/lib/availability";
 import { getBusyRanges } from "@/lib/google-calendar";
+import { resolveTier } from "@/lib/entry-tier";
 import { buildQuote, checkCouponRestrictEmail, QuoteError } from "@/lib/quote";
 import { getSessionUser } from "@/lib/auth-server";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -34,6 +35,12 @@ type CheckoutBody = {
   companyName?: string;
   partySize?: number;
   paymentMethod?: string; // card | invoice
+  /**
+   * 画面に表示した合計金額。サーバーは価格の権威としては一切使わず、
+   * 再計算した合計と一致しないときだけ409を返して再見積させる
+   * （管理者が料金を変更した瞬間に決済した利用者が、表示と違う金額で請求される事故を防ぐ）。
+   */
+  expectedTotal?: number;
 };
 
 /**
@@ -127,7 +134,9 @@ export async function POST(req: NextRequest) {
     // ログイン中ユーザー（本人専用クーポンの判定と、マイページ用の会員ID紐付けに使う。ゲスト予約はnull）
     const sessionUser = await getSessionUser();
 
-    // --- 価格計算（サーバー側。休日料金・割引・オプション・クーポン込み） ---
+    // --- 価格計算（サーバー側。休日料金・時間帯別料金・割引・オプション・クーポン込み） ---
+    // ティアはCookie（署名＋DB照合）のみで判定。bodyのティア指定は一切読まない（R2）
+    const tier = await resolveTier();
     let breakdown;
     try {
       breakdown = await buildQuote(
@@ -137,13 +146,21 @@ export async function POST(req: NextRequest) {
         body.hours,
         Array.isArray(body.optionIds) ? body.optionIds : [],
         typeof body.couponCode === "string" ? body.couponCode : "",
-        now
+        now,
+        tier
       );
     } catch (e) {
       if (e instanceof QuoteError) {
         return NextResponse.json({ error: e.message }, { status: e.status });
       }
       throw e;
+    }
+    // 表示額と再計算額の整合チェック（見積→決済の間に料金が変わっていたら再見積させる）
+    if (typeof body.expectedTotal === "number" && body.expectedTotal !== breakdown.total) {
+      return NextResponse.json(
+        { error: "価格が更新されました。金額をご確認のうえ、もう一度お手続きください" },
+        { status: 409 }
+      );
     }
     // 本人専用クーポン（自動配布分）はログイン必須とし、認証済みのログインメール一致のみで許可。
     // 予約フォームの自由入力メールでは判定しない（コードと宛先を知る第三者の流用・枠の使い潰しを防ぐ）。
@@ -203,6 +220,8 @@ export async function POST(req: NextRequest) {
       p_total_amount: breakdown.total,
       p_price_breakdown: breakdown,
       p_expires_at: expiresAt.toISOString(),
+      // 集計用のティア列。RPC内で予約INSERTと同時に保存し、breakdown.tierとの一致も検証される
+      p_price_tier: breakdown.tier ?? "standard",
     });
 
     if (rpcError) {

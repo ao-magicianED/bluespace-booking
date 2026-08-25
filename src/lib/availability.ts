@@ -1,6 +1,8 @@
 import { getDb } from "./supabase";
 import { getBusyRanges } from "./google-calendar";
 import { addDaysJst, buildDays, jstToUtc, jstDayOfWeek, PENDING_GRACE_MINUTES } from "./slots";
+import { resolveDayPricing } from "./price-bands";
+import { minBandPrice, type PriceTier } from "./pricing";
 import type { AvailabilityResponse, TimeRange, Venue } from "./types";
 
 export async function getVenueBySlug(slug: string): Promise<Venue | null> {
@@ -20,14 +22,25 @@ export async function getVenueBySlug(slug: string): Promise<Venue | null> {
  * - 自社DBの予約（confirmed＋期限内pending）
  * - Googleカレンダーのbusy（他サイト予約・手動ブロック）
  * を合成。FreeBusy失敗時は calendarError=true で全枠closed（fail closed）。
+ *
+ * tier は resolveTier()（署名Cookie＋DB照合）で解決した値のみを渡すこと。
+ * 帯あり拠点は days[].pricePerHour が「その日の最低帯価格」になり、pricing に帯表がつく。
+ * 帯なし拠点は従来と同一のレスポンス。
  */
 export async function getAvailability(
   venue: Venue,
   fromDate: string,
-  numDays = 7
+  numDays = 7,
+  tier: PriceTier = "standard"
 ): Promise<AvailabilityResponse> {
   const db = getDb();
   const now = new Date();
+
+  // 適用料金の解決（帯の穴・DB読取失敗はここでQuoteError(503)＝表示ごと停止。
+  // 誤った安値を表示したまま予約導線を出さないため）
+  const dayPricing = await resolveDayPricing(venue, tier);
+  const hasBands =
+    dayPricing.weekday.source === "bands" || dayPricing.holiday.source === "bands";
   const rangeStart = jstToUtc(fromDate, 0);
   const rangeEnd = jstToUtc(addDaysJst(fromDate, numDays), 0);
 
@@ -81,12 +94,16 @@ export async function getAvailability(
     (date) => {
       const dow = jstDayOfWeek(date);
       const isHoliday = dow === 0 || dow === 6 || holidayNames.has(date);
+      const resolved = isHoliday ? dayPricing.holiday : dayPricing.weekday;
       return {
         dayType: isHoliday ? ("holiday" as const) : ("weekday" as const),
+        // 帯あり: その日の最低帯価格（表示は「¥X〜」）/ 帯なし: 従来のフラット単価
         pricePerHour:
-          isHoliday && venue.holiday_hourly_price != null
-            ? venue.holiday_hourly_price
-            : venue.hourly_price,
+          resolved.source === "bands"
+            ? minBandPrice(resolved.bands)
+            : isHoliday && venue.holiday_hourly_price != null
+              ? venue.holiday_hourly_price
+              : venue.hourly_price,
         ...(holidayNames.has(date) ? { holidayName: holidayNames.get(date) } : {}),
       };
     }
@@ -106,5 +123,18 @@ export async function getAvailability(
     },
     days,
     calendarError,
+    ...(hasBands
+      ? {
+          pricing: {
+            tier:
+              dayPricing.weekday.tierUsed === "repeat" ||
+              dayPricing.holiday.tierUsed === "repeat"
+                ? ("repeat" as const)
+                : ("standard" as const),
+            weekday: dayPricing.weekday.bands,
+            holiday: dayPricing.holiday.bands,
+          },
+        }
+      : {}),
   };
 }

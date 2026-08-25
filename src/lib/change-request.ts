@@ -189,11 +189,24 @@ export function breakdownAfterDayTypeChange(
 }
 
 /**
+ * v3予約（時間帯別料金）の時間変更用コンテキスト。
+ * price-bands.ts の resolveBandChargeContext がDBの帯表から作る（v2予約はnull）。
+ */
+export type BandChargeContext = {
+  /** 変更前の時間比例額（スナップショットbaseSubtotal。per_hourオプション除く） */
+  prevBase: number;
+  /** 変更後の時間帯全体を「元予約と同じtier・現在の帯表」で計算した時間比例額 */
+  nextBase: number;
+};
+
+/**
  * 時間変更の料金差額を計算する。
- * - 単価は予約時のスナップショット（price_breakdown.pricePerHour）を踏襲し、
- *   割引/クーポンは引き継ぐ前提で時間分のみ増減する。
- * - 別日への変更で dayType（平日/土日祝）が変わる場合は、変更後の時間帯に
- *   venue の現行単価（祝日は holiday_hourly_price）を適用して差額を取る。
+ * - v2（bandContext=null）: 単価は予約時のスナップショット（price_breakdown.pricePerHour）を
+ *   踏襲し、割引/クーポンは引き継ぐ前提で時間分のみ増減する。別日への変更で
+ *   dayType（平日/土日祝）が変わる場合は、変更後の時間帯に venue の現行単価を適用。
+ * - v3（bandContextあり）: 変更後の時間帯全体を現在の帯表（同tier）で再計算した額と、
+ *   スナップショットの基本料金との差額を取る（帯またぎ延長・帯移動・短縮に対応）。
+ *   帯が変わっていなければ差額は「追加/削除されたスロットの帯価格」に一致する。
  * - 時間課金オプション（per_hour）はスナップショットの unitPrice を使って時間差分を
  *   増減に含める。unitPrice が無い旧スナップショットは従来通り基本単価のみ（後方互換）。
  * - キャンセル料相当区間（cancel_fee_basis_atで判定）に入っている短縮/減額は、料金を据え置く。
@@ -204,7 +217,8 @@ export function calcChangeAmounts(
   previous: { start: Date; end: Date },
   next: { start: Date; end: Date },
   cancelFeeBasisAt: Date,
-  dayTypes: ChangeDayTypes
+  dayTypes: ChangeDayTypes,
+  bandContext: BandChargeContext | null = null
 ): {
   newAmount: number;
   extraAmount: number;
@@ -243,11 +257,23 @@ export function calcChangeAmounts(
   // 変更前後の「時間比例部分」（基本料金＋per_hourオプション）の純差額。
   // 前後それぞれを円に丸めてから差を取る（差の一括丸めだと±0.5円で非対称になり、
   // 延長→同じ時間だけ短縮したときに1円ずれる）
-  const prevCharge = Math.round((pricePerHour + perHourOptionsRate) * prevHours);
-  const nextCharge = Math.round((nextPricePerHour + perHourOptionsRate) * nextHours);
+  // v3（帯価格）は帯表ベースの前後額（bandContext）を使う。返す単価は加重平均（表示専用）。
+  const prevCharge = bandContext
+    ? Math.round(bandContext.prevBase + perHourOptionsRate * prevHours)
+    : Math.round((pricePerHour + perHourOptionsRate) * prevHours);
+  const nextCharge = bandContext
+    ? Math.round(bandContext.nextBase + perHourOptionsRate * nextHours)
+    : Math.round((nextPricePerHour + perHourOptionsRate) * nextHours);
   const diffAmount = nextCharge - prevCharge;
 
-  const base = { kind, pricePerHour, nextPricePerHour, dayTypeChanged };
+  const base = bandContext
+    ? {
+        kind,
+        pricePerHour: prevHours > 0 ? Math.round(bandContext.prevBase / prevHours) : 0,
+        nextPricePerHour: nextHours > 0 ? Math.round(bandContext.nextBase / nextHours) : 0,
+        dayTypeChanged,
+      }
+    : { kind, pricePerHour, nextPricePerHour, dayTypeChanged };
 
   if (kind === "extend") {
     const extra = Math.max(0, diffAmount);
