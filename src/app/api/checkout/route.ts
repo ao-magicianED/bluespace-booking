@@ -4,6 +4,7 @@ import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { getVenueBySlug } from "@/lib/availability";
 import { getBusyRanges } from "@/lib/google-calendar";
 import { buildQuote, QuoteError } from "@/lib/quote";
+import { parseAttributionInput } from "@/lib/attribution";
 import { getSessionUser } from "@/lib/auth-server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { calcInvoiceDueAt, createAndSendInvoice, isInvoiceEligible } from "@/lib/invoice";
@@ -217,6 +218,21 @@ export async function POST(req: NextRequest) {
         );
       }
       throw new Error(`仮押さえ作成エラー: ${rpcError.message}`);
+    }
+
+    // --- 広告アトリビューションの記録 ---
+    // どの広告クリックから来た予約かをここで残す。決済確定（Webhook）と結びつけて
+    // Google広告へオフラインコンバージョンとして取り込む。
+    // 旧直販サイト（UPNOW）は完了ページが他社ドメインでタグを置けず計測できなかったが、
+    // この経路はブラウザに依存しないため広告ブロッカー・タブ即閉じでも欠測しない。
+    // 計測の失敗が予約を止めることは絶対にないので、エラーは握りつぶす。
+    try {
+      const attribution = parseAttributionInput(body as unknown as Record<string, unknown>);
+      if (Object.values(attribution).some((v) => v !== null)) {
+        await db.from("bookings").update(attribution).eq("id", bookingId);
+      }
+    } catch {
+      // 記録できなくても予約は続行する
     }
 
     const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
