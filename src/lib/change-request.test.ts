@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  breakdownAfterDayTypeChange,
   calcChangeAmounts,
   classifyChange,
   resolveChangeDayTypes,
@@ -129,6 +130,31 @@ describe("calcChangeAmounts 延長", () => {
     );
     expect(r.extraAmount).toBe(950);
   });
+
+  it("奇数円単価×0.5hの丸めが延長と短縮で対称（1円ずれない）", () => {
+    const oddVenue = { ...venue, hourly_price: 1905 } as unknown as Venue;
+    const booking = makeBooking({
+      total_amount: 5715,
+      price_breakdown: { rule: "v2", pricePerHour: 1905, dayType: "weekday", hours: 3, options: [] },
+    });
+    const ext = calcChangeAmounts(
+      booking, oddVenue,
+      range("2026-09-01", 10, 13), range("2026-09-01", 10, 13.5),
+      REFUNDABLE_BASIS, SAME_DAY
+    );
+    const longerBooking = makeBooking({
+      end_at: jst("2026-09-01", 13.5).toISOString(),
+      total_amount: 6668,
+      price_breakdown: { rule: "v2", pricePerHour: 1905, dayType: "weekday", hours: 3.5, options: [] },
+    });
+    const sho = calcChangeAmounts(
+      longerBooking, oddVenue,
+      range("2026-09-01", 10, 13.5), range("2026-09-01", 10, 13),
+      REFUNDABLE_BASIS, SAME_DAY
+    );
+    expect(ext.extraAmount).toBe(953);
+    expect(sho.refundAmount).toBe(953);
+  });
 });
 
 describe("calcChangeAmounts 短縮", () => {
@@ -158,6 +184,17 @@ describe("calcChangeAmounts 短縮", () => {
     );
     expect(r.refundAmount).toBe(0);
     expect(r.newAmount).toBe(5700);
+  });
+
+  it("返金は実効金額を上限にする（クーポン等で支払額が単価×時間より低い場合）", () => {
+    const booking = makeBooking({ total_amount: 700 }); // クーポン適用で¥700しか払っていない想定
+    const r = calcChangeAmounts(
+      booking, venue,
+      range("2026-09-01", 10, 13), range("2026-09-01", 10, 12),
+      REFUNDABLE_BASIS, SAME_DAY
+    );
+    expect(r.refundAmount).toBe(700); // 単価上は1,900だが支払額を超えない
+    expect(r.newAmount).toBe(0);
   });
 });
 
@@ -268,6 +305,38 @@ describe("calcChangeAmounts adjusted_total", () => {
       REFUNDABLE_BASIS, SAME_DAY
     );
     expect(r.newAmount).toBe(6900); // 5000 + 1900
+  });
+});
+
+describe("breakdownAfterDayTypeChange", () => {
+  it("dayTypeが変わらなければnull（スナップショット据え置き）", () => {
+    expect(
+      breakdownAfterDayTypeChange(makeBooking(), venue, SAME_DAY, jst("2026-09-02", 10))
+    ).toBeNull();
+  });
+
+  it("平日→祝日の確定でdayType・単価・日付を更新し、他のフィールドは保持する", () => {
+    const booking = makeBooking({
+      price_breakdown: {
+        rule: "v2", pricePerHour: 1900, dayType: "weekday", hours: 3, date: "2026-09-01",
+        options: [{ id: "h1", name: "ヒーター", amount: 300, unitPrice: 100, priceUnit: "per_hour" }],
+      },
+    });
+    const bd = breakdownAfterDayTypeChange(booking, venue, TO_HOLIDAY, jst("2026-09-05", 10));
+    expect(bd).toMatchObject({
+      rule: "v2",
+      dayType: "holiday",
+      pricePerHour: 2300,
+      date: "2026-09-05",
+      hours: 3,
+    });
+    expect((bd as { options: unknown[] }).options).toHaveLength(1);
+  });
+
+  it("holiday_hourly_price未設定なら平日単価のまま更新する", () => {
+    const flatVenue = { ...venue, holiday_hourly_price: null } as unknown as Venue;
+    const bd = breakdownAfterDayTypeChange(makeBooking(), flatVenue, TO_HOLIDAY, jst("2026-09-05", 10));
+    expect(bd).toMatchObject({ dayType: "holiday", pricePerHour: 1900 });
   });
 });
 

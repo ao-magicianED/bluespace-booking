@@ -162,6 +162,33 @@ export async function resolveChangeDayTypes(
 }
 
 /**
+ * 変更確定時のprice_breakdownスナップショット更新値を作る（dayTypeが変わらなければnull）。
+ * 平日→祝日へ変更確定した予約のスナップショットが旧dayType/旧単価のままだと、
+ * その予約を次に延長したとき旧平日単価で過小請求してしまうため、確定時に
+ * 単価区分・単価・日付だけ新しい予約日基準へ更新する。
+ * 変更履歴（元の請求根拠）はbooking_change_requestsが監査ログとして保持する。
+ */
+export function breakdownAfterDayTypeChange(
+  booking: Booking,
+  venue: Venue,
+  dayTypes: ChangeDayTypes,
+  nextStart: Date
+): Record<string, unknown> | null {
+  if (dayTypes.next === dayTypes.previous) return null;
+  const breakdown = (booking.price_breakdown ?? {}) as Record<string, unknown>;
+  const pricePerHour =
+    dayTypes.next === "holiday" && venue.holiday_hourly_price != null
+      ? venue.holiday_hourly_price
+      : venue.hourly_price;
+  return {
+    ...breakdown,
+    dayType: dayTypes.next,
+    pricePerHour,
+    date: utcToJstDateStr(nextStart),
+  };
+}
+
+/**
  * 時間変更の料金差額を計算する。
  * - 単価は予約時のスナップショット（price_breakdown.pricePerHour）を踏襲し、
  *   割引/クーポンは引き継ぐ前提で時間分のみ増減する。
@@ -213,11 +240,12 @@ export function calcChangeAmounts(
   const nextHours = (next.end.getTime() - next.start.getTime()) / (60 * 60 * 1000);
   const currentEffective = effectiveTotal(booking);
 
-  // 変更前後の「時間比例部分」（基本料金＋per_hourオプション）の純差額
-  const diffAmount = Math.round(
-    (nextPricePerHour + perHourOptionsRate) * nextHours -
-      (pricePerHour + perHourOptionsRate) * prevHours
-  );
+  // 変更前後の「時間比例部分」（基本料金＋per_hourオプション）の純差額。
+  // 前後それぞれを円に丸めてから差を取る（差の一括丸めだと±0.5円で非対称になり、
+  // 延長→同じ時間だけ短縮したときに1円ずれる）
+  const prevCharge = Math.round((pricePerHour + perHourOptionsRate) * prevHours);
+  const nextCharge = Math.round((nextPricePerHour + perHourOptionsRate) * nextHours);
+  const diffAmount = nextCharge - prevCharge;
 
   const base = { kind, pricePerHour, nextPricePerHour, dayTypeChanged };
 
@@ -232,9 +260,10 @@ export function calcChangeAmounts(
       // 有料区間: 短縮しても料金据え置き
       return { newAmount: currentEffective, extraAmount: 0, refundAmount: 0, ...base };
     }
-    const refund = Math.max(0, -diffAmount);
+    // クーポン・調整で実効金額が単価×時間より低い予約もあるため、実効金額を返金上限にする
+    const refund = Math.min(currentEffective, Math.max(0, -diffAmount));
     return {
-      newAmount: Math.max(0, currentEffective - refund),
+      newAmount: currentEffective - refund,
       extraAmount: 0,
       refundAmount: refund,
       ...base,
@@ -257,10 +286,12 @@ export function calcChangeAmounts(
   if (!refundable) {
     return { newAmount: currentEffective, extraAmount: 0, refundAmount: 0, ...base };
   }
+  // クーポン・調整で実効金額が単価×時間より低い予約もあるため、実効金額を返金上限にする
+  const refund = Math.min(currentEffective, -diffAmount);
   return {
-    newAmount: Math.max(0, currentEffective + diffAmount),
+    newAmount: currentEffective - refund,
     extraAmount: 0,
-    refundAmount: -diffAmount,
+    refundAmount: refund,
     ...base,
   };
 }
