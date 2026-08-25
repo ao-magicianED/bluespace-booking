@@ -4025,3 +4025,34 @@ html {
     max-width: 520px;
   }
 }
+
+/* ─── 時間帯別料金の帯表 ─────────────────────────────── */
+.band-price-wrap {
+  margin: 0.8rem 0 1rem;
+}
+.band-price-wrap > strong {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.95rem;
+}
+.band-price-table {
+  width: auto;
+  min-width: 280px;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+.band-price-table th,
+.band-price-table td {
+  white-space: nowrap;
+}
+.band-price-details {
+  margin: 0.4rem 0 0.6rem;
+}
+.band-price-details > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--navy-700, #1a3a6c);
+}
+.band-price-details .band-price-table {
+  margin-top: 0.5rem;
+}

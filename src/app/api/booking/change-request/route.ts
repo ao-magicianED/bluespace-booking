@@ -14,6 +14,8 @@ import {
   EXTEND_CHECKOUT_EXPIRY_SECONDS,
 } from "@/lib/change-request";
 import { effectiveTotal } from "@/lib/adjustment";
+import { finalizeChangeBreakdown, resolveChangeContext } from "@/lib/price-bands";
+import { QuoteError } from "@/lib/quote";
 import { isBookingOwner } from "@/lib/booking-access";
 import { adminBookingUrl, myBookingUrl, siteUrl } from "@/lib/site-url";
 import type { Booking, Venue } from "@/lib/types";
@@ -107,9 +109,30 @@ export async function POST(req: NextRequest) {
   );
   if (!avail.ok) return NextResponse.json({ error: avail.reason }, { status: 409 });
 
-  // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）
-  const dayTypes = await resolveChangeDayTypes(booking, start);
-  const amounts = calcChangeAmounts(booking, venue, previous, { start, end }, now, dayTypes);
+  // 別日への変更で平日⇄土日祝が変わる場合は単価差も差額に含める（据え置きだと取りこぼす）。
+  // 祝日DB読取失敗・帯設定の破損時は変更を止める（fail-expensive。安値で変更させない）
+  let dayTypes;
+  let changeCtx;
+  try {
+    dayTypes = await resolveChangeDayTypes(booking, start);
+    // 差額計算contextと確定時適用スナップショット案を「同一の帯表読み取り」から作る
+    //（別々に読むと、その間の帯置換で請求額と保存内訳が食い違う）
+    changeCtx = await resolveChangeContext(booking, venue, { start, end }, dayTypes);
+  } catch (e) {
+    if (e instanceof QuoteError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    console.error("[change-request] 料金解決失敗:", e);
+    return NextResponse.json(
+      { error: "料金の計算に失敗しました。時間をおいてお試しください" },
+      { status: 503 }
+    );
+  }
+  const amounts = calcChangeAmounts(
+    booking, venue, previous, { start, end }, now, dayTypes, changeCtx.bandContext
+  );
+  // 実請求額（据え置き・返金上限クランプ含む）で内訳を確定（明細＝請求額の不変条件）
+  const newBreakdown = finalizeChangeBreakdown(changeCtx.draftBreakdown, amounts.newAmount);
   const kind = classifyChange(previous, { start, end });
   const currentEffective = effectiveTotal(booking);
   const dayTypeNote = amounts.dayTypeChanged
@@ -136,6 +159,7 @@ export async function POST(req: NextRequest) {
       cancel_fee_basis_at: now.toISOString(),
       status: isExtend ? "pending_payment" : "pending",
       reason,
+      new_price_breakdown: newBreakdown,
     })
     .select("id")
     .single();

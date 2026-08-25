@@ -33,5 +33,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.).*)"],
+  // /r/（QR入口の302＋価格ティアCookie発行）は除外する。middlewareのSet-Cookieと
+  // route handlerの302レスポンスを混在させないため（入口はセッション更新不要。
+  // リダイレクト先の拠点ページで通常どおりmiddlewareが走る）。
+  matcher: ["/((?!api|r/|_next/static|_next/image|favicon.ico|.*\\.).*)"],
 };

@@ -1,6 +1,7 @@
 import { getDb } from "./supabase";
-import { getHolidaySet, isHolidayDate } from "./holidays";
-import { calcQuote, type CouponInfo, type PriceBreakdown, type SelectedOption } from "./pricing";
+import { getHolidaySetStrict, isHolidayDate } from "./holidays";
+import { calcQuote, type CouponInfo, type PriceBreakdown, type PriceTier, type SelectedOption } from "./pricing";
+import { resolvePricing } from "./price-bands";
 import type { Venue } from "./types";
 
 /** 利用者に見せられる見積もりエラー（statusつき） */
@@ -38,6 +39,12 @@ export function checkCouponRestrictEmail(
  * オプション・クーポンを検証して見積もりを作る。
  * /api/quote（表示用）と /api/checkout（決済用）の両方がこれを呼ぶため、
  * 画面に出る金額と請求額は必ず一致する。
+ *
+ * tier はサーバー側で resolveTier()（署名Cookie＋DB照合）により解決した値のみを渡すこと。
+ * リクエストbody/query/headerのティア指定は絶対に渡さない（R2: fail-expensive）。
+ *
+ * 祝日判定は厳格版（getHolidaySetStrict）を使う。祝日DBが読めないとき平日価格で
+ * 売るのは過小請求（fail-cheap）のため、取得不能時は QuoteError(503) で停止する。
  */
 export async function buildQuote(
   venue: Venue,
@@ -46,9 +53,25 @@ export async function buildQuote(
   hours: number,
   optionIds: string[],
   couponCode: string,
-  now: Date
+  now: Date,
+  tier: PriceTier = "standard"
 ): Promise<PriceBreakdown> {
   const db = getDb();
+
+  // --- 祝日判定（厳格版・fail-expensive） ---
+  let holidaySet: Set<string>;
+  try {
+    holidaySet = await getHolidaySetStrict([dateStr]);
+  } catch (e) {
+    console.error("[quote] 祝日データ取得失敗（見積を停止）:", e);
+    throw new QuoteError("現在ご予約を受け付けられません。時間をおいてお試しください", 503);
+  }
+  const isHoliday = isHolidayDate(dateStr, holidaySet);
+
+  // --- 適用料金の解決（帯があれば帯、無ければフラット） ---
+  // 帯なし拠点は従来どおり rule:"v2" のフラット計算（後方互換）。
+  const resolved = await resolvePricing(venue, tier, isHoliday ? "holiday" : "weekday");
+  const pricing = resolved.source === "bands" ? resolved : null;
 
   // --- オプション検証 ---
   let options: SelectedOption[] = [];
@@ -91,31 +114,11 @@ export async function buildQuote(
     coupon = { code: c.code, percent_off: c.percent_off, amount_off: c.amount_off };
 
     // 最低利用金額のチェック（クーポン適用前金額に対して）
-    const holidaySetPre = await getHolidaySet([dateStr]);
-    const pre = calcQuote(
-      venue,
-      dateStr,
-      startHour,
-      hours,
-      isHolidayDate(dateStr, holidaySetPre),
-      now,
-      options,
-      null
-    );
+    const pre = calcQuote(venue, dateStr, startHour, hours, isHoliday, now, options, null, pricing);
     if (pre.total < (c.min_amount ?? 0)) {
       throw new QuoteError(`このクーポンは¥${(c.min_amount ?? 0).toLocaleString()}以上のご利用で使えます`);
     }
   }
 
-  const holidaySet = await getHolidaySet([dateStr]);
-  return calcQuote(
-    venue,
-    dateStr,
-    startHour,
-    hours,
-    isHolidayDate(dateStr, holidaySet),
-    now,
-    options,
-    coupon
-  );
+  return calcQuote(venue, dateStr, startHour, hours, isHoliday, now, options, coupon, pricing);
 }

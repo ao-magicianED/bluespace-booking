@@ -4,18 +4,20 @@ import {
   calcChangeAmounts,
   classifyChange,
   resolveChangeDayTypes,
+  validateTimeRange,
   type ChangeDayTypes,
 } from "./change-request";
 import type { Booking, Venue } from "./types";
 
-// getHolidaySetだけモック（DB接続を避ける）。isHolidayDate等は実物を使う
+// 祝日取得だけモック（DB接続を避ける）。isHolidayDate等は実物を使う。
+// resolveChangeDayTypesは厳格版（getHolidaySetStrict）を使うため両方を同じモックに向ける
 const h = vi.hoisted(() => ({
   holidays: new Set<string>(),
   getHolidaySet: vi.fn(),
 }));
 vi.mock("./holidays", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./holidays")>();
-  return { ...actual, getHolidaySet: h.getHolidaySet };
+  return { ...actual, getHolidaySet: h.getHolidaySet, getHolidaySetStrict: h.getHolidaySet };
 });
 
 /** JSTの日付＋時（小数可）からDateを作る */
@@ -129,6 +131,27 @@ describe("calcChangeAmounts 延長", () => {
       REFUNDABLE_BASIS, SAME_DAY
     );
     expect(r.extraAmount).toBe(950);
+  });
+
+  it("奇数円per_hourオプションが複数あっても見積時と同じ丸め（1オプションごと）", () => {
+    // ¥101/hのオプション2個を0.5h延長: 見積時は round(101×0.5)×2 = 51×2 = 102円。
+    // 単価合算後に丸めると round(202×0.5)=101円 となり見積と1円ずれる（回帰テスト）
+    const booking = makeBooking({
+      total_amount: 6006,
+      price_breakdown: {
+        rule: "v2", pricePerHour: 1900, dayType: "weekday", hours: 3,
+        options: [
+          { id: "a", name: "A", amount: 303, unitPrice: 101, priceUnit: "per_hour" },
+          { id: "b", name: "B", amount: 303, unitPrice: 101, priceUnit: "per_hour" },
+        ],
+      },
+    });
+    const r = calcChangeAmounts(
+      booking, venue,
+      range("2026-09-01", 10, 13), range("2026-09-01", 10, 13.5),
+      REFUNDABLE_BASIS, SAME_DAY
+    );
+    expect(r.extraAmount).toBe(950 + 51 + 51); // 基本round(1900×0.5)＋各オプション個別丸め
   });
 
   it("奇数円単価×0.5hの丸めが延長と短縮で対称（1円ずれない）", () => {
@@ -337,6 +360,26 @@ describe("breakdownAfterDayTypeChange", () => {
     const flatVenue = { ...venue, holiday_hourly_price: null } as unknown as Venue;
     const bd = breakdownAfterDayTypeChange(makeBooking(), flatVenue, TO_HOLIDAY, jst("2026-09-05", 10));
     expect(bd).toMatchObject({ dayType: "holiday", pricePerHour: 1900 });
+  });
+});
+
+describe("validateTimeRange（日またぎ禁止）", () => {
+  const fullDayVenue = {
+    open_hour: 0,
+    close_hour: 24,
+    min_hours: 1,
+    max_hours: 8,
+  } as unknown as Venue;
+
+  it("同日内の変更は通る（終了が翌0:00＝24時扱いも同日）", () => {
+    expect(validateTimeRange(fullDayVenue, jst("2026-09-01", 10), jst("2026-09-01", 13)).ok).toBe(true);
+    expect(validateTimeRange(fullDayVenue, jst("2026-09-01", 22), jst("2026-09-01", 24)).ok).toBe(true);
+  });
+
+  it("日をまたぐ変更は拒否する（帯計算が空範囲＝0円になる事故の入口を塞ぐ）", () => {
+    const r = validateTimeRange(fullDayVenue, jst("2026-09-01", 23), jst("2026-09-02", 1));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("日をまたぐ");
   });
 });
 

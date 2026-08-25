@@ -13,6 +13,11 @@ type Props = {
   maxHours: number;
   openHour: number;
   closeHour: number;
+  /**
+   * 時間帯別料金（v3）の予約か。trueのとき単一単価での見込み額は表示せず、
+   * 正確な差額はサーバー計算（決済画面/申請確認）に委ねる案内を出す
+   */
+  isBandPricing?: boolean;
 };
 
 /** ISO文字列 → datetime-local用 'YYYY-MM-DDTHH:MM'（JST表記） */
@@ -43,6 +48,7 @@ export default function ChangeTimeForm({
   perHourOptionRate = 0,
   minHours,
   maxHours,
+  isBandPricing = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [start, setStart] = useState(isoToJstInput(currentStartIso));
@@ -154,12 +160,21 @@ export default function ChangeTimeForm({
             <>
               <strong>延長 {hoursDelta}時間</strong>
               <br />
-              追加お支払い見込み: ¥{estimatedExtra.toLocaleString()}（次の画面で決済）
-              <br />
-              {dateChanged && (
+              {isBandPricing ? (
                 <>
-                  ※平日⇄土日祝をまたぐ変更は単価差額も加算されます（正確な金額は決済画面に表示されます）
+                  追加料金は時間帯別料金で計算されます（正確な金額は次の決済画面に表示されます）
                   <br />
+                </>
+              ) : (
+                <>
+                  追加お支払い見込み: ¥{estimatedExtra.toLocaleString()}（次の画面で決済）
+                  <br />
+                  {dateChanged && (
+                    <>
+                      ※平日⇄土日祝をまたぐ変更は単価差額も加算されます（正確な金額は決済画面に表示されます）
+                      <br />
+                    </>
+                  )}
                 </>
               )}
               <span className="policy">最低{minHours}時間〜最大{maxHours}時間</span>
@@ -178,9 +193,11 @@ export default function ChangeTimeForm({
             <>
               <strong>時間ずらし</strong>
               <br />
-              {dateChanged
-                ? "平日⇄土日祝をまたぐ場合は単価差額のお支払い（決済画面へご案内）または差額返金が発生することがあります。"
-                : "管理者の承認が必要です。料金変動はありません。"}
+              {isBandPricing
+                ? "時間帯別料金のため、移動先の時間帯によって差額のお支払い（決済画面へご案内）または差額返金が発生することがあります。"
+                : dateChanged
+                  ? "平日⇄土日祝をまたぐ場合は単価差額のお支払い（決済画面へご案内）または差額返金が発生することがあります。"
+                  : "管理者の承認が必要です。料金変動はありません。"}
             </>
           )}
         </div>

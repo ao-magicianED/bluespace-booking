@@ -3,7 +3,7 @@ import { getBusyRanges } from "./google-calendar";
 import { calcRefund } from "./cancellation";
 import { effectiveTotal } from "./adjustment";
 import { PENDING_GRACE_MINUTES, utcToJstDateStr } from "./slots";
-import { getHolidaySet, isHolidayDate } from "./holidays";
+import { getHolidaySetStrict, isHolidayDate } from "./holidays";
 import type { DayType } from "./pricing";
 import type { Booking, Venue } from "./types";
 
@@ -93,6 +93,18 @@ export function validateTimeRange(
   }
   if (start >= end) return { ok: false, reason: "終了時刻は開始時刻より後にしてください" };
 
+  // 同一JST日内の利用のみ許可（新規予約と同じ制約）。日またぎを許すと、後段の
+  // 帯価格計算（時刻ベース）で開始>終了の空範囲になり基本料金0円で計算される事故になる。
+  // 終了0:00は同日の24:00として扱う（終了の60秒手前が属する日で判定）
+  const startDay = utcToJstDateStr(start);
+  const endDay = utcToJstDateStr(new Date(end.getTime() - 60 * 1000));
+  if (startDay !== endDay) {
+    return {
+      ok: false,
+      reason: "日をまたぐ時間には変更できません（別日のご利用は新規予約をお願いします）",
+    };
+  }
+
   // JST基準で営業時間内かをチェック
   const jstStart = new Date(start.getTime() + 9 * 60 * 60 * 1000);
   const jstEnd = new Date(end.getTime() + 9 * 60 * 60 * 1000);
@@ -131,7 +143,9 @@ export type ChangeDayTypes = { previous: DayType; next: DayType };
  * 変更前後それぞれの日付の dayType（平日/土日祝）を解決する。
  * - 変更前はスナップショット（price_breakdown.dayType）を最優先する。祝日テーブルが後から
  *   変わっても「実際に請求した単価区分」と食い違わないようにするため。
- * - 祝日テーブルはgetHolidaySetのfail-open方針（DB障害時は土日のみ判定）を踏襲する。
+ * - 祝日テーブルは厳格版（getHolidaySetStrict）を使う。fail-openで祝日を平日扱いすると
+ *   別日変更の差額を平日単価/平日帯で過小請求してしまうため、読取失敗時はthrowして
+ *   呼び出し側（変更申請・管理者変更）で処理を停止する（quote/checkoutと同方針）。
  */
 export async function resolveChangeDayTypes(
   booking: Booking,
@@ -147,11 +161,11 @@ export async function resolveChangeDayTypes(
   if (prevDateStr === nextDateStr) {
     const dayType =
       snapshotDayType ??
-      (isHolidayDate(prevDateStr, await getHolidaySet([prevDateStr])) ? "holiday" : "weekday");
+      (isHolidayDate(prevDateStr, await getHolidaySetStrict([prevDateStr])) ? "holiday" : "weekday");
     return { previous: dayType, next: dayType };
   }
 
-  const holidaySet = await getHolidaySet(
+  const holidaySet = await getHolidaySetStrict(
     snapshotDayType ? [nextDateStr] : [prevDateStr, nextDateStr]
   );
   return {
@@ -189,11 +203,24 @@ export function breakdownAfterDayTypeChange(
 }
 
 /**
+ * v3予約（時間帯別料金）の時間変更用コンテキスト。
+ * price-bands.ts の resolveBandChargeContext がDBの帯表から作る（v2予約はnull）。
+ */
+export type BandChargeContext = {
+  /** 変更前の時間比例額（スナップショットbaseSubtotal。per_hourオプション除く） */
+  prevBase: number;
+  /** 変更後の時間帯全体を「元予約と同じtier・現在の帯表」で計算した時間比例額 */
+  nextBase: number;
+};
+
+/**
  * 時間変更の料金差額を計算する。
- * - 単価は予約時のスナップショット（price_breakdown.pricePerHour）を踏襲し、
- *   割引/クーポンは引き継ぐ前提で時間分のみ増減する。
- * - 別日への変更で dayType（平日/土日祝）が変わる場合は、変更後の時間帯に
- *   venue の現行単価（祝日は holiday_hourly_price）を適用して差額を取る。
+ * - v2（bandContext=null）: 単価は予約時のスナップショット（price_breakdown.pricePerHour）を
+ *   踏襲し、割引/クーポンは引き継ぐ前提で時間分のみ増減する。別日への変更で
+ *   dayType（平日/土日祝）が変わる場合は、変更後の時間帯に venue の現行単価を適用。
+ * - v3（bandContextあり）: 変更後の時間帯全体を現在の帯表（同tier）で再計算した額と、
+ *   スナップショットの基本料金との差額を取る（帯またぎ延長・帯移動・短縮に対応）。
+ *   帯が変わっていなければ差額は「追加/削除されたスロットの帯価格」に一致する。
  * - 時間課金オプション（per_hour）はスナップショットの unitPrice を使って時間差分を
  *   増減に含める。unitPrice が無い旧スナップショットは従来通り基本単価のみ（後方互換）。
  * - キャンセル料相当区間（cancel_fee_basis_atで判定）に入っている短縮/減額は、料金を据え置く。
@@ -204,7 +231,8 @@ export function calcChangeAmounts(
   previous: { start: Date; end: Date },
   next: { start: Date; end: Date },
   cancelFeeBasisAt: Date,
-  dayTypes: ChangeDayTypes
+  dayTypes: ChangeDayTypes,
+  bandContext: BandChargeContext | null = null
 ): {
   newAmount: number;
   extraAmount: number;
@@ -231,23 +259,39 @@ export function calcChangeAmounts(
   const dayTypeChanged = dayTypes.next !== dayTypes.previous;
   const nextPricePerHour = dayTypeChanged ? venuePriceFor(dayTypes.next) : pricePerHour;
 
-  // 時間課金オプションの時間単価合計（スナップショットにunitPriceがある新形式のみ）
-  const perHourOptionsRate = (breakdown.options ?? [])
+  // 時間課金オプションの時間単価（スナップショットにunitPriceがある新形式のみ）。
+  // 見積時（calcQuote）と同じく「1オプションごとに丸め」てから合算する
+  //（単価を合算してから丸めると、奇数円オプションが複数あるとき見積額と1円以上ずれる）
+  const perHourOptionUnits = (breakdown.options ?? [])
     .filter((o) => o?.priceUnit === "per_hour" && typeof o?.unitPrice === "number")
-    .reduce((sum, o) => sum + (o.unitPrice as number), 0);
+    .map((o) => o.unitPrice as number);
+  const perHourOptionsCharge = (hours: number): number =>
+    perHourOptionUnits.reduce((sum, unit) => sum + Math.round(unit * hours), 0);
 
   const prevHours = (previous.end.getTime() - previous.start.getTime()) / (60 * 60 * 1000);
   const nextHours = (next.end.getTime() - next.start.getTime()) / (60 * 60 * 1000);
   const currentEffective = effectiveTotal(booking);
 
   // 変更前後の「時間比例部分」（基本料金＋per_hourオプション）の純差額。
-  // 前後それぞれを円に丸めてから差を取る（差の一括丸めだと±0.5円で非対称になり、
+  // 前後それぞれを成分ごとに円へ丸めてから差を取る（差の一括丸めだと±0.5円で非対称になり、
   // 延長→同じ時間だけ短縮したときに1円ずれる）
-  const prevCharge = Math.round((pricePerHour + perHourOptionsRate) * prevHours);
-  const nextCharge = Math.round((nextPricePerHour + perHourOptionsRate) * nextHours);
+  // v3（帯価格）は帯表ベースの前後額（bandContext）を使う。返す単価は加重平均（表示専用）。
+  const prevCharge =
+    (bandContext ? Math.round(bandContext.prevBase) : Math.round(pricePerHour * prevHours)) +
+    perHourOptionsCharge(prevHours);
+  const nextCharge =
+    (bandContext ? Math.round(bandContext.nextBase) : Math.round(nextPricePerHour * nextHours)) +
+    perHourOptionsCharge(nextHours);
   const diffAmount = nextCharge - prevCharge;
 
-  const base = { kind, pricePerHour, nextPricePerHour, dayTypeChanged };
+  const base = bandContext
+    ? {
+        kind,
+        pricePerHour: prevHours > 0 ? Math.round(bandContext.prevBase / prevHours) : 0,
+        nextPricePerHour: nextHours > 0 ? Math.round(bandContext.nextBase / nextHours) : 0,
+        dayTypeChanged,
+      }
+    : { kind, pricePerHour, nextPricePerHour, dayTypeChanged };
 
   if (kind === "extend") {
     const extra = Math.max(0, diffAmount);

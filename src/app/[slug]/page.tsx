@@ -6,17 +6,21 @@ import { notFound } from "next/navigation";
 import { getAvailability, getVenueBySlug } from "@/lib/availability";
 import { getDb, isDbConfigured } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/auth-server";
+import { resolveTier } from "@/lib/entry-tier";
+import { resolveDayPricing, resolveDayPricingBatch } from "@/lib/price-bands";
+import { minBandPrice } from "@/lib/pricing";
 import { todayJst } from "@/lib/slots";
 import { getVenueContent } from "@/content/venues";
 import BookingGrid from "@/components/BookingGrid";
 import AvailabilityDigest from "@/components/AvailabilityDigest";
 import PhotoGallery from "@/components/PhotoGallery";
+import PriceBandTable from "@/components/PriceBandTable";
 import FloatingNav from "@/components/FloatingNav";
 import ReviewSection from "@/components/ReviewSection";
 import { aggregateReviews } from "@/lib/reviews";
 import { getPublishedReviews } from "@/lib/reviews-db";
 import { describePolicy } from "@/lib/cancellation";
-import type { VenueOption } from "@/lib/types";
+import type { Venue, VenueOption } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +29,8 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 // generateMetadataとページ本体が同一リクエスト内で同じ拠点を二重取得しないようメモ化する
 // （getVenueBySlugはfetchでなくSupabaseクライアントのためNext.js自動メモ化の対象外）
 const getVenueBySlugCached = cache(getVenueBySlug);
+// metadata用のstandard料金（検索エンジン向けはCookieに関係なくstandardの最低価格）
+const getStandardDayPricingCached = cache((venue: Venue) => resolveDayPricing(venue, "standard"));
 
 export async function generateMetadata({
   params,
@@ -37,12 +43,19 @@ export async function generateMetadata({
   // （返さないと親layoutのmetadataを継承してしまうため）
   if (!content) return { alternates: { canonical: `${SITE}/${slug}` } };
   // {price} はDBの現在価格で置換する（価格改定にtitle/descriptionを自動追随させる）。
-  // 取得できないときは「格安」表記に落としてフォーマットを保つ。
+  // 時間帯別料金の拠点はstandard帯の最低価格（¥X/時間〜）。取得できないときは「格安」。
   let priceText = "格安";
   if (isDbConfigured()) {
     try {
       const venue = await getVenueBySlugCached(slug);
-      if (venue) priceText = `¥${venue.hourly_price.toLocaleString()}/時間〜`;
+      if (venue) {
+        const pricing = await getStandardDayPricingCached(venue);
+        const min =
+          pricing.weekday.source === "bands" || pricing.holiday.source === "bands"
+            ? Math.min(minBandPrice(pricing.weekday.bands), minBandPrice(pricing.holiday.bands))
+            : venue.hourly_price;
+        priceText = `¥${min.toLocaleString()}/時間〜`;
+      }
     } catch (e) {
       console.error("[metadata] 拠点価格の取得に失敗。価格なし表記で続行します", e);
     }
@@ -78,8 +91,11 @@ export default async function VenuePage({
   if (!venue) notFound();
   const content = getVenueContent(slug);
 
+  // 価格ティア（現地QRのCookie署名＋DB照合。失敗は必ずstandard）
+  const tier = await resolveTier();
+
   const [initial, optionsResult, user, othersResult, photosResult, publishedReviews] = await Promise.all([
-    getAvailability(venue, todayJst(), 7),
+    getAvailability(venue, todayJst(), 7, tier),
     getDb()
       .from("venue_options")
       .select("id, name, price, price_unit")
@@ -89,7 +105,7 @@ export default async function VenuePage({
     getSessionUser(),
     getDb()
       .from("venues")
-      .select("slug, name, hourly_price, holiday_hourly_price")
+      .select("id, slug, name, hourly_price, holiday_hourly_price")
       .eq("active", true)
       .neq("id", venue.id)
       .order("name"),
@@ -128,11 +144,14 @@ export default async function VenuePage({
   const dbFaqs = (venue.faqs ?? null) as { q: string; a: string }[] | null;
   const effectiveFaqs = dbFaqs && dbFaqs.length > 0 ? dbFaqs : (content?.faqs ?? []);
   const otherVenues = (othersResult.data ?? []) as {
+    id: string;
     slug: string;
     name: string;
     hourly_price: number;
     holiday_hourly_price: number | null;
   }[];
+  // 他拠点カードの価格も帯対応（帯あり拠点は最低帯価格の「¥X〜」表示）
+  const otherPricing = await resolveDayPricingBatch(otherVenues, tier);
   const initialForm = user
     ? {
         name: (user.user_metadata?.full_name as string) ?? "",
@@ -146,10 +165,20 @@ export default async function VenuePage({
       }
     : null;
 
-  const priceLine =
-    venue.holiday_hourly_price != null && venue.holiday_hourly_price !== venue.hourly_price
+  // 帯あり拠点は最低帯価格の「〜」表示（詳細は帯表）。帯なし拠点は従来表示のまま
+  const bandPricing = initial.pricing ?? null;
+  const weekdayMin = bandPricing ? minBandPrice(bandPricing.weekday) : venue.hourly_price;
+  const holidayMin = bandPricing
+    ? minBandPrice(bandPricing.holiday)
+    : (venue.holiday_hourly_price ?? venue.hourly_price);
+  const priceLine = bandPricing
+    ? `平日 ¥${weekdayMin.toLocaleString()}〜 / 土日祝 ¥${holidayMin.toLocaleString()}〜（1時間・税込）`
+    : venue.holiday_hourly_price != null && venue.holiday_hourly_price !== venue.hourly_price
       ? `平日 ¥${venue.hourly_price.toLocaleString()} / 土日祝 ¥${venue.holiday_hourly_price.toLocaleString()}（1時間・税込）`
       : `¥${venue.hourly_price.toLocaleString()} / 時間（税込）`;
+  const allBandPrices = bandPricing
+    ? [...bandPricing.weekday, ...bandPricing.holiday].map((b) => b.hourlyPrice)
+    : null;
 
   // 構造化データ（LocalBusiness + パンくず）。名称・住所はGoogleビジネスプロフィールと一致させる
   const jsonLd = content
@@ -185,7 +214,9 @@ export default async function VenuePage({
             opens: "00:00",
             closes: "23:59",
           },
-          priceRange: `¥${venue.hourly_price.toLocaleString()}〜¥${(venue.holiday_hourly_price ?? venue.hourly_price).toLocaleString()}/時間`,
+          priceRange: allBandPrices
+            ? `¥${Math.min(...allBandPrices).toLocaleString()}〜¥${Math.max(...allBandPrices).toLocaleString()}/時間`
+            : `¥${venue.hourly_price.toLocaleString()}〜¥${(venue.holiday_hourly_price ?? venue.hourly_price).toLocaleString()}/時間`,
           // 実利用者レビューが1件以上あるときだけ星評価を検索結果に出す（AggregateRating）
           ...(reviewAggregate.count > 0
             ? {
@@ -257,6 +288,15 @@ export default async function VenuePage({
             <strong>{priceLine}</strong>
             ・30分単位（最大{venue.max_hours}時間連続）・24時間営業
           </p>
+          {bandPricing && (
+            <details className="band-price-details">
+              <summary>時間帯別料金を見る（1時間・税込）</summary>
+              <PriceBandTable weekday={bandPricing.weekday} holiday={bandPricing.holiday} />
+            </details>
+          )}
+          {bandPricing?.tier === "repeat" && (
+            <p className="policy">現地QR限定 リピーター価格でご案内中</p>
+          )}
           {(venue.last_minute_percent > 0 || venue.early_bird_percent > 0) && (
             <p>
               {venue.last_minute_percent > 0 && `🈹 当日予約 ${venue.last_minute_percent}%OFF　`}
@@ -328,7 +368,7 @@ export default async function VenuePage({
       <section className="venue-section" id="book">
         <h2>空き状況・ご予約</h2>
         <p className="policy">
-          公式サイトのご予約は仲介手数料がかからないため、いつでも最安値です。
+          公式サイトのご予約は仲介手数料がかかりません。
         </p>
         <BookingGrid venueSlug={venue.slug} initial={initial} options={options} initialForm={initialForm} isLoggedIn={!!user} />
         <details className="faq-item cancel-policy-box">
@@ -441,7 +481,7 @@ export default async function VenuePage({
             <h2>ご予約はこちら</h2>
             <p>
               空き状況を確認して、クレジットカードでそのまま予約できます。
-              当日予約は開始直前まで受付・10%OFF。
+              当日予約は開始直前まで受付。
             </p>
             <p>
               <a href="#book" className="hero-book-btn">
@@ -465,6 +505,9 @@ export default async function VenuePage({
               <div className="other-venues-grid">
                 {otherVenues.map((o) => {
                   const oc = getVenueContent(o.slug);
+                  const op = otherPricing.get(o.id);
+                  const oHasBands =
+                    op && (op.weekday.source === "bands" || op.holiday.source === "bands");
                   return (
                     <Link key={o.slug} href={`/${o.slug}`} className="other-venue-card">
                       <div className="other-venue-photo">
@@ -479,12 +522,17 @@ export default async function VenuePage({
                       <strong>{o.name}</strong>
                       {oc && <span className="addr">🚉 {oc.station}</span>}
                       <span className="price">
-                        ¥{o.hourly_price.toLocaleString()}
-                        {o.holiday_hourly_price != null &&
-                        o.holiday_hourly_price !== o.hourly_price
-                          ? `〜¥${o.holiday_hourly_price.toLocaleString()}`
-                          : ""}{" "}
-                        / 時間
+                        {oHasBands
+                          ? `¥${Math.min(
+                              minBandPrice(op.weekday.bands),
+                              minBandPrice(op.holiday.bands)
+                            ).toLocaleString()}〜 / 時間`
+                          : `¥${o.hourly_price.toLocaleString()}${
+                              o.holiday_hourly_price != null &&
+                              o.holiday_hourly_price !== o.hourly_price
+                                ? `〜¥${o.holiday_hourly_price.toLocaleString()}`
+                                : ""
+                            } / 時間`}
                       </span>
                     </Link>
                   );

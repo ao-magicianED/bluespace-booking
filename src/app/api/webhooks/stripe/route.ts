@@ -843,6 +843,8 @@ async function handleChangeRequestCompleted(session: Stripe.Checkout.Session): P
       },
       reason: cr.reason || "予約延長（決済完了）",
       changeRequestId,
+      // 申請時に確定した内訳を適用（決済待ち中に帯表が変わっても請求根拠と一致させる）
+      newBreakdown: cr.new_price_breakdown,
     });
     if (!applyResult.ok) return;
   } catch (e) {

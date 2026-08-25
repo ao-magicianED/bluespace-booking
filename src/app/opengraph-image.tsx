@@ -57,7 +57,7 @@ export default function OgImage() {
             marginTop: 24,
           }}
         >
-          {["仲介手数料なし最安値", "30分単位予約", "当日予約10%OFF", "24時間営業"].map(
+          {["仲介手数料なし", "30分単位予約", "公式予約サイト", "24時間営業"].map(
             (chip) => (
               <div
                 key={chip}

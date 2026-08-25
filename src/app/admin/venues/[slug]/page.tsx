@@ -3,14 +3,18 @@ import { notFound, redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { getDb } from "@/lib/supabase";
 import { getVenueContent } from "@/content/venues";
+import { VENUE_PRICING_POLICY } from "@/lib/price-actions";
 import AccessInfoEditor from "@/components/AccessInfoEditor";
+import AdminEntryTokenManager, { type EntryTokenRow } from "@/components/AdminEntryTokenManager";
+import AdminPriceBandEditor from "@/components/AdminPriceBandEditor";
 import FaqEditor from "@/components/FaqEditor";
 import PhotoManager from "@/components/PhotoManager";
+import type { PriceBand } from "@/lib/pricing";
 import type { Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/** 管理画面: 1拠点の入退室案内・FAQ・写真をまとめて編集 */
+/** 管理画面: 1拠点の料金帯・QRトークン・入退室案内・FAQ・写真をまとめて編集 */
 export default async function AdminVenueDetailPage({
   params,
 }: {
@@ -22,17 +26,46 @@ export default async function AdminVenueDetailPage({
   const db = getDb();
   const { data: venue } = await db
     .from("venues")
-    .select("id, slug, name, access_info, faqs, active")
+    .select("id, slug, name, access_info, faqs, active, hourly_price, holiday_hourly_price")
     .eq("slug", slug)
-    .maybeSingle<Pick<Venue, "id" | "slug" | "name" | "access_info" | "faqs" | "active">>();
+    .maybeSingle<
+      Pick<
+        Venue,
+        "id" | "slug" | "name" | "access_info" | "faqs" | "active" | "hourly_price" | "holiday_hourly_price"
+      >
+    >();
   if (!venue) notFound();
 
-  const { data: photos } = await db
-    .from("venue_photos")
-    .select("id, category_id, category_label, src, sort")
-    .eq("venue_id", venue.id)
-    .order("cat_sort", { ascending: true })
-    .order("sort", { ascending: true });
+  const [{ data: photos }, { data: bandRows }, { data: tokenRows }] = await Promise.all([
+    db
+      .from("venue_photos")
+      .select("id, category_id, category_label, src, sort")
+      .eq("venue_id", venue.id)
+      .order("cat_sort", { ascending: true })
+      .order("sort", { ascending: true }),
+    db
+      .from("venue_price_bands")
+      .select("tier, day_type, start_hour, end_hour, hourly_price")
+      .eq("venue_id", venue.id)
+      .order("start_hour", { ascending: true }),
+    db
+      .from("venue_entry_tokens")
+      .select("token, active, label, created_at")
+      .eq("venue_id", venue.id)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const bands = (bandRows ?? []) as {
+    tier: string;
+    day_type: string;
+    start_hour: number;
+    end_hour: number;
+    hourly_price: number;
+  }[];
+  const pickBands = (dayType: string, tier: string): PriceBand[] =>
+    bands
+      .filter((b) => b.day_type === dayType && b.tier === tier)
+      .map((b) => ({ startHour: b.start_hour, endHour: b.end_hour, hourlyPrice: b.hourly_price }));
 
   const dbFaqs = (venue.faqs ?? null) as { q: string; a: string }[] | null;
   const defaultFaqs = getVenueContent(slug)?.faqs ?? [];
@@ -55,6 +88,19 @@ export default async function AdminVenueDetailPage({
           </Link>
         </span>
       </div>
+
+      <AdminPriceBandEditor
+        venueId={venue.id}
+        weekdayStandard={pickBands("weekday", "standard")}
+        weekdayRepeat={pickBands("weekday", "repeat")}
+        holidayStandard={pickBands("holiday", "standard")}
+        holidayRepeat={pickBands("holiday", "repeat")}
+        weekdayFlatPrice={venue.hourly_price}
+        holidayFlatPrice={venue.holiday_hourly_price ?? venue.hourly_price}
+        floorPrice={VENUE_PRICING_POLICY[venue.slug]?.floorPrice ?? null}
+      />
+
+      <AdminEntryTokenManager venueId={venue.id} initialTokens={(tokenRows ?? []) as EntryTokenRow[]} />
 
       <PhotoManager
         venueId={venue.id}

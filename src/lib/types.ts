@@ -1,3 +1,5 @@
+import type { PriceBand, PriceTier } from "./pricing";
+
 export type Venue = {
   id: string;
   slug: string;
@@ -75,6 +77,8 @@ export type Booking = {
   review_token: string;
   /** レビュー依頼メールの送信済みフラグ（冪等化用） */
   review_request_sent_at: string | null;
+  /** 予約時の価格ティア（集計用・0022で追加。監査はprice_breakdown.tier側） */
+  price_tier: PriceTier;
 };
 
 export type AdjustmentType = "price_decrease" | "price_increase" | "cancel_fee_override";
@@ -123,6 +127,11 @@ export type BookingChangeRequest = {
   extra_amount: number;
   /** 申請作成時刻スナップショット（キャンセル料計算の基準） */
   cancel_fee_basis_at: string;
+  /**
+   * 変更確定時に適用するprice_breakdown（申請時点の帯表・単価で確定済み。0022で追加）。
+   * null=更新不要（v2のdayType不変）または旧申請（適用時に再計算フォールバック）
+   */
+  new_price_breakdown: unknown | null;
   status: ChangeRequestStatus;
   stripe_session_id: string | null;
   stripe_payment_intent_id: string | null;
@@ -146,11 +155,19 @@ export type DaySlots = {
   dayOfWeek: number;
   /** weekday=平日 / holiday=土日祝 */
   dayType: "weekday" | "holiday";
-  /** この日の時給（円） */
+  /** この日の時給（円）。時間帯別料金の拠点では「その日の最低帯価格」（表示は¥X〜） */
   pricePerHour: number;
   /** 祝日名（祝日のみ） */
   holidayName?: string;
   slots: { hour: number; status: SlotStatus }[];
+};
+
+/** 時間帯別料金が設定されている拠点のみ付与される料金表（帯なし拠点では省略） */
+export type AvailabilityPricing = {
+  /** このレスポンスに適用された価格ティア（repeatならリピーター価格バッジを表示） */
+  tier: PriceTier;
+  weekday: PriceBand[];
+  holiday: PriceBand[];
 };
 
 export type AvailabilityResponse = {
@@ -168,4 +185,6 @@ export type AvailabilityResponse = {
   days: DaySlots[];
   /** FreeBusy取得に失敗した場合true（fail closed: 全枠closed表示） */
   calendarError: boolean;
+  /** 時間帯別料金の帯表（帯なし拠点では省略＝従来レスポンスと同一） */
+  pricing?: AvailabilityPricing;
 };

@@ -135,30 +135,50 @@ export default async function BookingDetailPage({
             <tr>
               <th>料金</th>
               <td>
-                {bd?.rule === "v2" ? (
+                {bd?.rule === "v2" || bd?.rule === "v3" ? (
                   <>
-                    {bd.dayType === "holiday" ? "土日祝" : "平日"} ¥
-                    {bd.pricePerHour?.toLocaleString()} × {bd.hours}時間 = ¥
-                    {bd.baseSubtotal?.toLocaleString()}
+                    {bd.rule === "v3" && bd.bandLines ? (
+                      bd.bandLines.map((l) => (
+                        <span key={l.label}>
+                          {bd.dayType === "holiday" ? "土日祝" : "平日"} {l.label} ¥
+                          {l.pricePerHour.toLocaleString()} × {l.hours}時間 = ¥
+                          {l.amount.toLocaleString()}
+                          <br />
+                        </span>
+                      ))
+                    ) : (
+                      <>
+                        {bd.dayType === "holiday" ? "土日祝" : "平日"} ¥
+                        {bd.pricePerHour?.toLocaleString()} × {bd.hours}時間 = ¥
+                        {bd.baseSubtotal?.toLocaleString()}
+                        <br />
+                      </>
+                    )}
                     {bd.discount && (
                       <>
-                        <br />
                         {DISCOUNT_LABEL[bd.discount.kind]} -¥{bd.discount.amount.toLocaleString()}
+                        <br />
                       </>
                     )}
                     {(bd.options ?? []).map((o) => (
                       <span key={o.id}>
-                        <br />
                         {o.name} +¥{o.amount.toLocaleString()}
+                        <br />
                       </span>
                     ))}
                     {bd.coupon && (
                       <>
-                        <br />
                         クーポン（{bd.coupon.code}） -¥{bd.coupon.amount.toLocaleString()}
+                        <br />
                       </>
                     )}
-                    <br />
+                    {bd.changeAdjustment && (
+                      <>
+                        時間変更時の調整 {bd.changeAdjustment.amount >= 0 ? "+" : "-"}¥
+                        {Math.abs(bd.changeAdjustment.amount).toLocaleString()}
+                        <br />
+                      </>
+                    )}
                   </>
                 ) : null}
                 {booking.adjusted_total != null && booking.adjusted_total !== booking.total_amount ? (
@@ -251,6 +271,7 @@ export default async function BookingDetailPage({
               maxHours={venue.max_hours}
               openHour={venue.open_hour}
               closeHour={venue.close_hour}
+              isBandPricing={bd?.rule === "v3"}
             />
           )}
 

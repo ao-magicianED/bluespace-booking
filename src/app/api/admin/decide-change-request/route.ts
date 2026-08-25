@@ -156,6 +156,8 @@ export async function POST(req: NextRequest) {
     },
     reason: cr.reason || "お客様申請の時間変更",
     changeRequestId,
+    // 申請時に確定した内訳を適用（承認待ちの間に帯表が変わっても請求根拠と一致させる）
+    newBreakdown: cr.new_price_breakdown,
   });
   if (!applyResult.ok) {
     // 承認自体は既に確定している（二重クリック対策のCASを通過済み）ため、ここで

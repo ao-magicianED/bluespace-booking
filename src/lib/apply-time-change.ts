@@ -3,7 +3,8 @@ import { sendAdminAlert, sendMail } from "./mail";
 import { formatBookingPeriod } from "./confirm";
 import { updateBookingEventTime, type BookingEventDetails } from "./google-calendar";
 import { effectiveTotal, collectPaymentIntents, refundFromPaymentIntents } from "./adjustment";
-import { resolveChangeDayTypes, breakdownAfterDayTypeChange } from "./change-request";
+import { resolveChangeDayTypes } from "./change-request";
+import { buildBreakdownAfterChange } from "./price-bands";
 import { adminBookingUrl } from "./site-url";
 import type { Booking, Venue } from "./types";
 import type { PriceBreakdown } from "./pricing";
@@ -31,8 +32,15 @@ export async function applyApprovedTimeChange(params: {
   amounts: { newAmount: number; extraAmount: number; refundAmount: number };
   reason: string;
   changeRequestId: string;
+  /**
+   * 申請作成時に確定したprice_breakdown（booking_change_requests.new_price_breakdown）。
+   * 決済待ちの間に帯表が変わっても「請求した額の内訳」を適用するため、あれば必ずこれを使う。
+   * null/未指定（旧申請）は従来どおり適用時点で再計算するフォールバック。
+   */
+  newBreakdown?: unknown;
 }): Promise<ApplyTimeChangeResult> {
-  const { bookingId, venue, booking, start, end, amounts, reason, changeRequestId } = params;
+  const { bookingId, venue, booking, start, end, amounts, reason, changeRequestId, newBreakdown } =
+    params;
   const db = getDb();
   const now = new Date();
   const currentEffective = effectiveTotal(booking);
@@ -46,14 +54,22 @@ export async function applyApprovedTimeChange(params: {
   if (amounts.newAmount !== currentEffective) {
     updates.adjusted_total = amounts.newAmount;
   }
-  // 平日⇄土日祝をまたぐ変更なら、スナップショットの単価区分・単価・日付を新予約日基準へ更新
-  //（据え置くと、この予約を次に延長したとき旧dayTypeの単価で誤請求する）
-  try {
-    const dayTypes = await resolveChangeDayTypes(booking, start);
-    const newBreakdown = breakdownAfterDayTypeChange(booking, venue, dayTypes, start);
-    if (newBreakdown) updates.price_breakdown = newBreakdown;
-  } catch (e) {
-    console.error("[change-time] dayType解決失敗（スナップショットは据え置き）:", e);
+  // スナップショット（price_breakdown）を新しい予約時間の基準へ更新する。
+  // v2: 平日⇄土日祝をまたぐ変更のみ単価区分・単価・日付を更新（従来どおり）
+  // v3: 帯構成が変わるため毎回、帯内訳（bandLines/baseSubtotal等）を更新
+  //（据え置くと、この予約を次に延長したとき旧単価・旧帯構成で誤請求する）
+  // 原則は申請作成時に確定済みのnewBreakdownを適用（帯表がその後変わっても請求根拠と一致）。
+  // 無い旧申請だけ適用時点で再計算し、その失敗は据え置きで続行（v2旧予約のみの経路）。
+  if (newBreakdown && typeof newBreakdown === "object") {
+    updates.price_breakdown = newBreakdown;
+  } else {
+    try {
+      const dayTypes = await resolveChangeDayTypes(booking, start);
+      const rebuilt = await buildBreakdownAfterChange(booking, venue, dayTypes, start, end);
+      if (rebuilt) updates.price_breakdown = rebuilt;
+    } catch (e) {
+      console.error("[change-time] スナップショット再構築失敗（据え置きで続行）:", e);
+    }
   }
   // 増額分はここで初めて「実際に支払われた」ことが確定する（呼び出し元は決済完了後のみ
   // extraAmount>0で呼ぶ）。extra_paid_amountの加算はDB側の単一UPDATEで完結させ、

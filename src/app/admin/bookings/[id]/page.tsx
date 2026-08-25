@@ -159,6 +159,24 @@ export default async function AdminBookingDetailPage({
                     ）
                   </span>
                 )}
+                {bd?.rule === "v3" && (
+                  <span className="policy">
+                    {" "}
+                    （{bd.dayType === "holiday" ? "土日祝" : "平日"}・時間帯別
+                    {(bd.bandLines ?? [])
+                      .map((l) => ` / ${l.label} ¥${l.pricePerHour.toLocaleString()}×${l.hours}h`)
+                      .join("")}
+                    {bd.discount ? ` / 割引-¥${bd.discount.amount.toLocaleString()}` : ""}
+                    {bd.coupon ? ` / クーポン${bd.coupon.code}-¥${bd.coupon.amount.toLocaleString()}` : ""}
+                    {(bd.options ?? []).length > 0 ? ` / オプション+¥${bd.optionsSubtotal?.toLocaleString()}` : ""}
+                    {bd.changeAdjustment
+                      ? ` / 変更調整${bd.changeAdjustment.amount >= 0 ? "+" : ""}¥${bd.changeAdjustment.amount.toLocaleString()}`
+                      : ""}
+                    ）
+                  </span>
+                )}
+                <br />
+                入口: {booking.price_tier === "repeat" ? "リピート（現地QR）" : "通常"}
                 <br />
                 支払い方法: {booking.payment_method === "invoice" ? "請求書払い（銀行振込）" : "カード決済"}
                 {(booking.refunded_amount ?? 0) > 0 && (

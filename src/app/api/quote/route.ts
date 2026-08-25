@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVenueBySlug } from "@/lib/availability";
+import { resolveTier } from "@/lib/entry-tier";
 import { buildQuote, QuoteError } from "@/lib/quote";
 import { validateBookingRequest } from "@/lib/slots";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -8,8 +9,9 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/quote
- * 予約前の見積もり（休日料金・割引・オプション・クーポンの内訳）を返す。
+ * 予約前の見積もり（休日料金・時間帯別料金・割引・オプション・クーポンの内訳）を返す。
  * 決済時の /api/checkout と同じ計算関数を使うため、表示額と請求額は必ず一致する。
+ * 価格ティアはCookie（署名＋DB照合）のみで判定する。bodyのティア指定は一切読まない。
  */
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -28,6 +30,7 @@ export async function POST(req: NextRequest) {
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
+    const tier = await resolveTier();
     const breakdown = await buildQuote(
       venue,
       body.date,
@@ -35,9 +38,10 @@ export async function POST(req: NextRequest) {
       body.hours,
       Array.isArray(body.optionIds) ? body.optionIds : [],
       typeof body.couponCode === "string" ? body.couponCode : "",
-      now
+      now,
+      tier
     );
-    return NextResponse.json({ breakdown });
+    return NextResponse.json({ breakdown }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (e) {
     if (e instanceof QuoteError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
