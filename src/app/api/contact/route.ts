@@ -6,11 +6,11 @@ import { checkRateLimit } from "@/lib/rate-limit";
 export const dynamic = "force-dynamic";
 
 type ContactBody = {
-  type?: string; // general | longterm | storage
+  type?: string; // general | longterm | storage | consulting
   name?: string;
   email?: string;
   phone?: string;
-  company?: string; // 法人/事業者名（storage型で使用）
+  company?: string; // 法人/事業者名（storage型・consulting型で使用）
   venues?: string[]; // slug配列
   undecided?: boolean;
   frequency?: string;
@@ -18,6 +18,8 @@ type ContactBody = {
   storageProduct?: string; // 例: "ブルーストレージ白金高輪"
   storagePlan?: string; // 例: "月額178,000円（標準）" / "月額158,000円（6ヶ月以上）"
   storageStart?: string; // 利用開始希望（自由記述）
+  consultingCategory?: string; // レンタルスペース立ち上げ・集客改善コンサルの相談類型（(a)/(b)/(c)、consulting型で使用）
+  consultingMenu?: string; // ご希望メニュー（ライト相談 / 集客改善伴走 / 立ち上げフルサポート / まだ決めていない）
   website?: string; // honeypot
 };
 
@@ -44,7 +46,13 @@ export async function POST(req: NextRequest) {
   }
 
   const type =
-    body.type === "longterm" ? "longterm" : body.type === "storage" ? "storage" : "general";
+    body.type === "longterm"
+      ? "longterm"
+      : body.type === "storage"
+        ? "storage"
+        : body.type === "consulting"
+          ? "consulting"
+          : "general";
   const name = (body.name ?? "").trim();
   const email = (body.email ?? "").trim();
   const phone = (body.phone ?? "").trim().slice(0, 20);
@@ -55,6 +63,8 @@ export async function POST(req: NextRequest) {
   const storageProduct = (body.storageProduct ?? "").trim().slice(0, 100);
   const storagePlan = (body.storagePlan ?? "").trim().slice(0, 100);
   const storageStart = (body.storageStart ?? "").trim().slice(0, 100);
+  const consultingCategory = (body.consultingCategory ?? "").trim().slice(0, 100);
+  const consultingMenu = (body.consultingMenu ?? "").trim().slice(0, 100);
 
   if (!name || name.length > 100) {
     return NextResponse.json({ error: "お名前を入力してください" }, { status: 400 });
@@ -81,7 +91,9 @@ export async function POST(req: NextRequest) {
       ? "長期・定期利用の相談"
       : type === "storage"
         ? "ブルーストレージ（法人向けミニ倉庫）のお問い合わせ"
-        : "一般のお問い合わせ";
+        : type === "consulting"
+          ? "レンタルスペース立ち上げ・集客改善コンサルのご相談"
+          : "一般のお問い合わせ";
 
   // --- 管理者通知（Discord＋メール） ---
   await sendAdminAlert(
@@ -92,6 +104,7 @@ export async function POST(req: NextRequest) {
       `種別: ${typeLabel}`,
       `お名前: ${name}`,
       ...(type === "storage" && company ? [`会社/屋号: ${company}`] : []),
+      ...(type === "consulting" && company ? [`運営中/検討中のスペース・屋号: ${company}`] : []),
       `メール: ${email}`,
       `電話: ${phone || "（未記入）"}`,
       ...(type === "storage"
@@ -100,7 +113,12 @@ export async function POST(req: NextRequest) {
             `プラン: ${storagePlan || "（未指定）"}`,
             `利用開始希望: ${storageStart || "（未指定）"}`,
           ]
-        : [`希望スペース: ${venueLine}`]),
+        : type === "consulting"
+          ? [
+              `相談の類型: ${consultingCategory || "（未選択）"}`,
+              `ご希望メニュー: ${consultingMenu || "（未選択）"}`,
+            ]
+          : [`希望スペース: ${venueLine}`]),
       ...(type === "longterm" ? [`利用頻度: ${frequency || "（未選択）"}`] : []),
       ``,
       `▼内容`,
@@ -110,17 +128,22 @@ export async function POST(req: NextRequest) {
 
   // --- お客様への自動返信（失敗しても受付自体は成立） ---
   const isStorage = type === "storage";
+  const isConsulting = type === "consulting";
   await sendMail({
     to: email,
     subject: isStorage
       ? "【ブルーストレージ】お問い合わせを受け付けました"
-      : "【ブルーステージ】お問い合わせを受け付けました",
+      : isConsulting
+        ? "【Blue Space】ご相談を受け付けました"
+        : "【ブルーステージ】お問い合わせを受け付けました",
     text: [
       `${name} 様`,
       ``,
       isStorage
         ? `ブルーストレージへのお問い合わせありがとうございます。`
-        : `ブルースペースへのお問い合わせありがとうございます。`,
+        : isConsulting
+          ? `Blue Spaceへのご相談ありがとうございます。`
+          : `ブルースペースへのお問い合わせありがとうございます。`,
       `以下の内容で受け付けました。担当者より通常1〜2営業日以内にご返信します。`,
       ``,
       `▼お問い合わせ内容`,
@@ -131,18 +154,27 @@ export async function POST(req: NextRequest) {
             ...(storagePlan ? [`プラン: ${storagePlan}`] : []),
             ...(storageStart ? [`利用開始希望: ${storageStart}`] : []),
           ]
-        : [`希望スペース: ${venueLine}`]),
+        : isConsulting
+          ? [
+              ...(consultingCategory ? [`相談の類型: ${consultingCategory}`] : []),
+              ...(consultingMenu ? [`ご希望メニュー: ${consultingMenu}`] : []),
+            ]
+          : [`希望スペース: ${venueLine}`]),
       ...(type === "longterm" && frequency ? [`利用頻度: ${frequency}`] : []),
       ``,
       message,
       ``,
-      `※このメールに返信いただいてもお問い合わせを追加できます。`,
+      isConsulting
+        ? `※料金・支援範囲は個別のヒアリング後にご案内します。特定商取引法に基づく表記は https://bluespacerental.com/consulting/tokushoho をご確認ください。`
+        : `※このメールに返信いただいてもお問い合わせを追加できます。`,
       ``,
       `──────────────────`,
       `ブルーステージ合同会社`,
       isStorage
         ? `ブルーストレージ（法人向けミニ倉庫）`
-        : `ブルースペース（レンタルスペース）`,
+        : isConsulting
+          ? `Blue Space 立ち上げ・集客改善コンサル`
+          : `ブルースペース（レンタルスペース）`,
       `https://bluespacerental.com`,
     ].join("\n"),
   });
