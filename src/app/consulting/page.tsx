@@ -87,6 +87,10 @@ const FAQS = [
     q: "しつこい営業をされませんか？",
     a: "無理な勧誘は行いません。ヒアリング・ご提案の後、ご検討いただく時間を差し上げます。",
   },
+  {
+    q: "すぐに対応してもらえますか？",
+    a: "7拠点の運営と並行して代表が直接ご対応するため、支援の質を保つ目的で月間の新規ご相談の受付を3件までとしています。その月の受付が埋まっている場合は、翌月以降のご案内となることがあります。お問い合わせいただいた時点の状況を個別にお伝えします。",
+  },
 ];
 
 export const metadata: Metadata = {
@@ -144,6 +148,7 @@ export default function ConsultingPage() {
             <li>🏢 都内7拠点運営の実績</li>
             <li>🧾 自社予約システム内製・手数料ゼロ</li>
             <li>📊 日次自動集計基盤による実データ運営</li>
+            <li>🙋 月間の新規ご相談は3件まで</li>
             <li>💬 無料ヒアリングの上で個別ご提案</li>
           </ul>
           <div className="storage-hero-cta">
@@ -187,7 +192,7 @@ export default function ConsultingPage() {
         <p className="policy storage-perks-lead">
           料金は支援範囲・期間により異なるため、無料ヒアリングの後に個別でお見積りします。
           <br />
-          まずはお気軽にご相談ください。
+          支援の質を保つため、<strong>月間の新規ご相談の受付は3件まで</strong>とさせていただいています。
         </p>
         <div className="storage-perks-grid">
           {MENUS.map((m) => (
