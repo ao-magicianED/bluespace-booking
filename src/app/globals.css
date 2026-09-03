@@ -4056,3 +4056,50 @@ html {
 .band-price-details .band-price-table {
   margin-top: 0.5rem;
 }
+
+/* ===== コンサル: 費用の目安（匿名比較表） ===== */
+.compare-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1rem 0 0.9rem;
+  border-radius: 12px;
+}
+.compare-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  background: var(--card);
+  font-size: 0.88rem;
+}
+.compare-table th,
+.compare-table td {
+  border: 1px solid var(--border);
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.6;
+}
+.compare-table thead th {
+  background: #f1f5f9;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--navy-900);
+}
+.compare-table tbody th {
+  background: #f8fafc;
+  font-weight: 600;
+  white-space: nowrap;
+  width: 12rem;
+}
+.compare-table .is-self {
+  background: var(--coral-100);
+}
+.compare-table thead .is-self {
+  color: var(--coral-600);
+}
+.consulting-menu-price {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--coral-600);
+}
