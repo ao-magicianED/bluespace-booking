@@ -6,6 +6,8 @@ export const dynamic = "force-static";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 const PAGE_URL = `${SITE}/consulting`;
+/** あおサロンAI公式LINE（aosalonai.com の公式プロフィールに掲載されている友だち追加リンク） */
+const LINE_URL = "https://lin.ee/CKsJsWB";
 
 const PERSONAS = [
   {
@@ -64,7 +66,7 @@ const MENUS = [
 ];
 
 const FLOW = [
-  { step: "1", title: "お問い合わせ", body: "下のフォーム、またはあおサロンAI公式LINEからご相談ください。" },
+  { step: "1", title: "お問い合わせ", body: "下のフォーム、またはあおサロンAI公式LINE(lin.ee/CKsJsWB)からご相談ください。" },
   { step: "2", title: "無料ヒアリング", body: "現状・お悩み・スペースの状況をお伺いします（オンライン可）。" },
   { step: "3", title: "個別のご提案・お見積り", body: "状況に応じたメニューと料金をご案内します。料金はヒアリング内容により異なるため、事前の一律提示はしていません。" },
   { step: "4", title: "ご契約・支援開始", body: "ご納得いただいた上でご契約。伴走を開始します。" },
@@ -155,7 +157,12 @@ export default function ConsultingPage() {
             <a href="#inquiry" className="storage-cta-btn">
               無料ヒアリングを申し込む →
             </a>
-            <span className="policy">通常1〜2営業日でご返信／無理な営業はいたしません</span>
+            <span className="policy">
+              通常1〜2営業日でご返信／無理な営業はいたしません／
+              <a href={LINE_URL} target="_blank" rel="noopener noreferrer">
+                公式LINEからも相談できます
+              </a>
+            </span>
           </div>
         </div>
       </section>
@@ -230,7 +237,11 @@ export default function ConsultingPage() {
           <span className="storage-eyebrow light">無料ヒアリング</span>
           <h2>お問い合わせ・ご相談</h2>
           <p>
-            下記フォームからご相談ください。あおサロンAI公式LINEをご利用中の方は、そちらからのご相談も受け付けています。
+            下記フォームからご相談ください。
+            <a href={LINE_URL} target="_blank" rel="noopener noreferrer">
+              あおサロンAI公式LINE
+            </a>
+            からのご相談も受け付けています。
             <br />
             通常1〜2営業日以内に担当者よりご返信いたします。
           </p>

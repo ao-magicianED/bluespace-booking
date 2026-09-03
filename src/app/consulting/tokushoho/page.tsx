@@ -40,7 +40,11 @@ export default function ConsultingTokushohoPage() {
             <th>連絡先</th>
             <td>
               <Link href="/consulting#inquiry">コンサルティングお問い合わせフォーム</Link>
-              、またはあおサロンAI公式LINEよりご連絡ください。
+              、または
+              <a href="https://lin.ee/CKsJsWB" target="_blank" rel="noopener noreferrer">
+                あおサロンAI公式LINE
+              </a>
+              よりご連絡ください。
               <br />
               電話番号: ご請求をいただいた場合には遅滞なく開示いたします。
             </td>

@@ -60,7 +60,8 @@ Blue Spaceでは、レンタルスペースの立ち上げ・集客改善のご�
 ※上記は個別の事例であり、立地・投資額・競合状況・実施した施策等の条件によって結果は異なります。同様の成果を保証するものではありません。
 
 ご興味のある方は下記からお問い合わせください。
-https://bluespacerental.com/consulting (あおサロンAI公式LINEからのご相談も受け付けています)
+https://bluespacerental.com/consulting
+あおサロンAI公式LINEからもご相談いただけます → https://lin.ee/CKsJsWB
 ```
 
 ---

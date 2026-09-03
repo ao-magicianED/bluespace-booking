@@ -132,7 +132,8 @@ Blue Spaceでは、レンタルスペースの立ち上げ・集客改善のご�
 ※上記は個別の事例であり、立地・投資額・競合状況・実施した施策等の条件によって結果は異なります。同様の成果を保証するものではありません。
 ご興味のある方は下記からお問い合わせください。
 
-ご相談・お問い合わせはこちら → https://bluespacerental.com/consulting (公式LINEからも受け付けています)
+ご相談・お問い合わせはこちら → https://bluespacerental.com/consulting
+あおサロンAI公式LINEからもご相談いただけます → https://lin.ee/CKsJsWB
 ```
 
 ---
@@ -200,7 +201,8 @@ Blue Spaceでは、レンタルスペースの立ち上げ・集客改善のご�
 ▼レンタルスペースの立ち上げ・集客改善のご相談はこちら
 物件探し、内装デザイン、写真撮影、集客導線設計、日々の運営代行まで対応しています。
 「スペースを活用できていない」「予約が思ったように入らない」「一人での立ち上げが不安」という方は、まずは無料相談からどうぞ。
-https://bluespacerental.com/consulting (公式LINEからのご相談も受け付けています)
+https://bluespacerental.com/consulting
+あおサロンAI公式LINE: https://lin.ee/CKsJsWB
 
 ▼運営中の拠点(bluespacerental.comより予約可能)
 上野御徒町 / 神田 / 上野駅前4A / 上野駅前4B / 西新宿403 / 京成小岩 / 白金高輪
