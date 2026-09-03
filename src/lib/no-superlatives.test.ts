@@ -103,4 +103,39 @@ describe("禁止語ガード（他社比較を含むコンサル導線）", () =
     expect(content).toContain("単純な比較はできません");
     expect(content).toContain("提供の有無を示すものではありません");
   });
+
+  /**
+   * 比較表の公正性ガード。
+   * 他社にだけ不利な但し書き（「別料金」等）を付け、自社の別料金を落とすと、
+   * 公取委「比較広告に関する景品表示法上の考え方」の第3要件（比較方法の公正性）に反する。
+   * 実際に一度この非対称が混入したため、テストで固定する。
+   */
+  it("比較表で他社に別料金を注記するなら、自社の別料金（運営代行）も注記している", () => {
+    const content = readFileSync(
+      path.join(process.cwd(), "src/app/consulting/page.tsx"),
+      "utf8"
+    );
+    const annotatesOthers = content.includes("撮影は別料金");
+    if (annotatesOthers) {
+      expect(
+        content.includes("運営代行は別途月額"),
+        "他社の別料金だけを注記し、自社の運営代行が別途月額である旨を比較表に書いていません（有利誤認のおそれ）"
+      ).toBe(true);
+    }
+  });
+
+  it("比較表に意味の定義されていない記号（―）を使っていない", () => {
+    const content = readFileSync(
+      path.join(process.cwd(), "src/app/consulting/page.tsx"),
+      "utf8"
+    );
+    const rowsBlock = content.slice(
+      content.indexOf("const MARKET_ROWS"),
+      content.indexOf("const FLOW")
+    );
+    expect(
+      rowsBlock.includes('"―"'),
+      "比較表に凡例のない記号「―」が含まれています。「公開情報に記載なし」等の説明済みの表記を使ってください"
+    ).toBe(false);
+  });
 });
