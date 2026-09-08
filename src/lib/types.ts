@@ -56,6 +56,8 @@ export type Booking = {
   calendar_sync_status: "none" | "synced" | "failed";
   confirmation_email_sent_at: string | null;
   reminder_email_sent_at: string | null;
+  /** カード決済の仮予約受付メール（Checkout URL入り）の送信受理時刻（best-effort監査用・0023で追加） */
+  pending_payment_email_sent_at: string | null;
   expires_at: string | null;
   cancelled_at: string | null;
   cancel_reason: string | null;
