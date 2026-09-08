@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { getDb } from "@/lib/supabase";
 import { getStripe, STRIPE_APP_TAG } from "@/lib/stripe";
 import { getVenueBySlug } from "@/lib/availability";
@@ -9,6 +10,10 @@ import { getSessionUser } from "@/lib/auth-server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { calcInvoiceDueAt, createAndSendInvoice, isInvoiceEligible } from "@/lib/invoice";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
+import { notifyPendingPayment, runNotifyWithSlowLog } from "@/lib/pending-payment-mail";
+import { CheckoutAbortError, rollbackCheckout } from "@/lib/checkout-rollback";
+import { scheduleAfterResponse } from "@/lib/after-response";
+import { siteUrl } from "@/lib/site-url";
 import {
   jstToUtc,
   overlaps,
@@ -345,6 +350,10 @@ export async function POST(req: NextRequest) {
 
     // ===== カード決済（Stripe Checkout）フロー =====
 
+    // セッション作成後に起きた想定外の例外（CAS クエリの throw・レスポンス構築の失敗等）でも
+    // 作成済みセッションを失効できるよう、ID は catch の外側に保持する
+    let createdSessionId: string | null = null;
+
     try {
       const stripe = getStripe();
       const session = await stripe.checkout.sessions.create({
@@ -362,11 +371,28 @@ export async function POST(req: NextRequest) {
         customer_email: email,
         metadata: { booking_id: bookingId, app: STRIPE_APP_TAG },
         payment_intent_data: { metadata: { booking_id: bookingId, app: STRIPE_APP_TAG } },
-        // 仮押さえと同じ30分で失効させる（Stripeの最短は30分）
-        expires_at: Math.floor(now.getTime() / 1000) + PENDING_HOLD_MINUTES * 60,
+        // 仮押さえと同じ30分で失効させる（Stripeの最短は30分）。
+        // 処理開始時の now ではなく作成直前の時刻を基準にする（FreeBusy・見積・RPC の処理時間ぶん
+        // Stripe から見た期限が30分を下回るのを防ぐ）。さらに安全マージン（定数のコメント参照）を
+        // 加算し、通信時間・秒境界・時計差で作成が間欠的に拒否されるのを防ぐ。
+        // DB・メールの期限は Stripe が返す実値を使う
+        expires_at: Math.floor(Date.now() / 1000) + PENDING_HOLD_MINUTES * 60 + STRIPE_EXPIRY_SAFETY_SECONDS,
         success_url: `${site}/thanks?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${site}/${venue.slug}?canceled=1`,
       });
+      createdSessionId = session.id;
+
+      // Stripe が決済URLを返さなかった場合は決済不能。セッションIDを保存せず、外側の catch で
+      // 仮押さえ解放→セッション失効の順に巻き戻す（「URL の無い pending」を残さない）
+      if (!session.url) {
+        throw new CheckoutAbortError("Stripe Checkout URL が返されませんでした", session.id);
+      }
+      // after() のクロージャ内では型の絞り込みが効かないため、ここで string として確定させる
+      const checkoutUrl: string = session.url;
+      // Stripe が返した実際の失効時刻を DB とメールの権威にする
+      const sessionExpiresAt = session.expires_at
+        ? new Date(session.expires_at * 1000)
+        : expiresAt;
 
       // セッションIDと実際の失効時刻を保存。
       // この保存に失敗するとWebhook側の照合が必ず失敗する（支払済みなのに未確定）ため、
@@ -379,9 +405,7 @@ export async function POST(req: NextRequest) {
           customer_type: customerType,
           company_name: companyName || null,
           party_size: partySize,
-          expires_at: session.expires_at
-            ? new Date(session.expires_at * 1000).toISOString()
-            : expiresAt.toISOString(),
+          expires_at: sessionExpiresAt.toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq("id", bookingId)
@@ -389,22 +413,91 @@ export async function POST(req: NextRequest) {
         .select("id")
         .single();
       if (saveError) {
-        try {
-          await stripe.checkout.sessions.expire(session.id);
-        } catch (e) {
-          console.error("[checkout] セッション失効失敗:", e);
-        }
-        throw new Error(`セッションID保存エラー: ${saveError.message}`);
+        // 外側の catch で仮押さえ解放→セッション失効の順に巻き戻す
+        throw new CheckoutAbortError(`セッションID保存エラー: ${saveError.message}`, session.id);
       }
 
-      return NextResponse.json({ url: session.url });
+      // --- 仮予約受付メール（Checkout URL入り）---
+      // 決済画面を閉じてしまった利用者が、期限内なら同じセッションで支払いを再開できるようにする。
+      // 必ず CAS 成功後に登録する（保存失敗→巻き戻し後に「生きて見える決済リンク」だけが残るのを防ぐ）。
+      // after() でレスポンス返却後に実行する: 利用者を待たせず、Vercel は after() の完了（関数の最大実行時間内）
+      // まで関数を維持する。after() が追跡するのはコールバックが返す Promise までなので、通知は最後まで
+      // await し、遅いときはログを出すだけにする（タイマー側を先に解決させて打ち切ると追跡外になる）。
+      // after() の登録自体が throw する環境でも決済本体に波及させず、その場で実行する（この経路だけ総時間上限つき・超過時は URL 応答を優先）。
+      // 応答は登録前に構築する（登録後に応答生成が throw すると、巻き戻し後に失効した URL の
+      // メールが送られる経路ができるため）
+      const response = NextResponse.json({ url: checkoutUrl });
+      await scheduleAfterResponse(
+        after,
+        async () => {
+          await runNotifyWithSlowLog(
+            () =>
+              notifyPendingPayment(
+                {
+                  bookingId,
+                  sessionId: session.id,
+                  email,
+                  phone,
+                  customerName: name,
+                  label,
+                  partySize,
+                  amount: breakdown.total,
+                  checkoutUrl,
+                  expiresAt: sessionExpiresAt,
+                  rebookUrl: `${siteUrl()}/${venue.slug}`,
+                },
+                {
+                  sendMail,
+                  sendAdminAlert,
+                  markSent: async (id, sentAtIso) => {
+                    const { error } = await db
+                      .from("bookings")
+                      .update({ pending_payment_email_sent_at: sentAtIso })
+                      .eq("id", id);
+                    return { error };
+                  },
+                }
+              ),
+            {
+              slowAfterMs: PENDING_MAIL_SLOW_LOG_MS,
+              onSlow: () =>
+                console.error(
+                  `[checkout] 仮予約受付メール処理が ${PENDING_MAIL_SLOW_LOG_MS}ms を超過（完了まで待機中）booking=${bookingId}`
+                ),
+              onError: (e) => console.error("[checkout] 仮予約受付メール処理エラー:", e),
+            }
+          );
+        },
+        {
+          onRegisterError: (e) => console.error("[checkout] after() への登録に失敗（その場で実行）:", e),
+          onFallbackTimeout: () =>
+            console.error(
+              `[checkout] after() 未対応環境での受付メール処理が ${PENDING_MAIL_FALLBACK_TIMEOUT_MS}ms 以内に完了せず、URL 応答を優先（メールは届かない可能性）booking=${bookingId}`
+            ),
+        },
+        PENDING_MAIL_FALLBACK_TIMEOUT_MS
+      );
+
+      return response;
     } catch (e) {
-      // Stripeセッション作成に失敗したら仮押さえを解放する
-      await db
-        .from("bookings")
-        .update({ booking_status: "expired", updated_at: new Date().toISOString() })
-        .eq("id", bookingId)
-        .eq("booking_status", "pending");
+      // セッション作成・URL取得・セッションID保存のいずれかに失敗したら仮押さえを解放し、
+      // 作成済みのセッションがあれば失効させる（順序は DB → Stripe。checkout-rollback.ts 参照）
+      // CheckoutAbortError（想定内の中断）以外の想定外の例外でも、作成済みセッションがあれば失効させる
+      const sessionId = e instanceof CheckoutAbortError ? e.sessionId : createdSessionId;
+      await rollbackCheckout(
+        { bookingId, sessionId, reason: e instanceof Error ? e.message : String(e) },
+        {
+          releaseBooking: async () => {
+            const { error } = await db
+              .from("bookings")
+              .update({ booking_status: "expired", updated_at: new Date().toISOString() })
+              .eq("id", bookingId)
+              .eq("booking_status", "pending");
+            return { error };
+          },
+          expireSession: (id) => getStripe().checkout.sessions.expire(id, STRIPE_ROLLBACK_REQUEST_OPTIONS),
+        }
+      );
       throw e;
     }
   } catch (e) {
@@ -415,3 +508,22 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+/** 受付メール処理の遅延観測の閾値。超えてもログを出すだけで、通知は最後まで await する（after() が追跡するのはコールバックの Promise まで） */
+const PENDING_MAIL_SLOW_LOG_MS = 8000;
+
+/**
+ * after() が使えない環境で inline 実行にフォールバックしたときの総時間上限。
+ * 超過時は劣化ログを残して URL 応答を優先する（メールは届かない可能性。after() 側は上限なし）
+ */
+const PENDING_MAIL_FALLBACK_TIMEOUT_MS = 8000;
+
+/**
+ * Stripe Checkout の失効までの安全マージン（秒）。Stripe の下限は「セッション作成から30分」で、
+ * ちょうど30分を指定すると通信時間・秒境界・時計差で作成が間欠的に拒否され得る。
+ * DB・メールの期限は Stripe が返す実値を使うので、実際の猶予は31分程度になる。
+ */
+const STRIPE_EXPIRY_SAFETY_SECONDS = 60;
+
+/** 巻き戻し時の Stripe 呼び出しは短い時間上限・再試行なし（DB 解放後の best-effort） */
+const STRIPE_ROLLBACK_REQUEST_OPTIONS: Stripe.RequestOptions = { timeout: 10_000, maxNetworkRetries: 0 };
