@@ -104,6 +104,13 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleCompleted(session: Stripe.Checkout.Session): Promise<void> {
+  if (session.metadata?.app !== STRIPE_APP_TAG) {
+    // 同一Stripeアカウントを共有する他サービス（あおサロン等）の決済。
+    // このシステムが作成したCheckout Sessionではないため何もしない。
+    // 新しいサービスが同じStripeアカウントに追加されても、appタグを持たない限り自動的に無視される
+    return;
+  }
+
   // 追加請求（料金増額）の決済完了
   if (session.metadata?.adjustment_id) {
     await handleAdjustmentCompleted(session);
@@ -118,12 +125,6 @@ async function handleCompleted(session: Stripe.Checkout.Session): Promise<void> 
   const db = getDb();
   const bookingId = session.metadata?.booking_id;
   if (!bookingId) {
-    if (session.metadata?.app !== STRIPE_APP_TAG) {
-      // 同一Stripeアカウントを共有する他サービス（あおサロン等）の決済。
-      // このシステムが作成したCheckout Sessionではないため何もしない。
-      // 新しいサービスが同じStripeアカウントに追加されても、appタグを持たない限り自動的に無視される
-      return;
-    }
     await sendAdminAlert(
       "⚠️ booking_idのない決済を検知",
       `Checkoutセッション ${session.id} にbooking_idがありません。Stripeダッシュボードで確認してください。`
@@ -505,6 +506,13 @@ async function handleRefundFailed(refund: Stripe.Refund): Promise<void> {
 }
 
 async function handleExpired(session: Stripe.Checkout.Session): Promise<void> {
+  if (session.metadata?.app !== STRIPE_APP_TAG) {
+    // 同一Stripeアカウントを共有する他サービス（あおサロン等）の決済。
+    // このシステムが作成したCheckout Sessionではないため何もしない。
+    // 新しいサービスが同じStripeアカウントに追加されても、appタグを持たない限り自動的に無視される
+    return;
+  }
+
   const db = getDb();
 
   // 時間変更（延長）Checkoutの期限切れ
