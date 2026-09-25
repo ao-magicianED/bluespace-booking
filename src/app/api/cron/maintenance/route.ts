@@ -53,6 +53,10 @@ export async function GET(req: NextRequest) {
       missing: check.missing.map((r) => `${r.migration}: ${r.target}`),
       inconclusive: check.inconclusive.map((r) => `${r.migration}: ${r.target}`),
     };
+    // 正常時はアラートが出ないため、検査が動いたこと自体をログで確認できるようにする
+    console.log(
+      `[cron] schema check: probed=${check.probed} missing=${check.missing.length} inconclusive=${check.inconclusive.length}`
+    );
     const alert = formatSchemaDriftAlert(check);
     if (alert) await sendAdminAlert(alert.subject, alert.text);
   } catch (e) {
