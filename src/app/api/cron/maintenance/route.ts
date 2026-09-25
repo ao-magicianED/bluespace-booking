@@ -5,6 +5,7 @@ import { refreshHolidays } from "@/lib/holidays";
 import { runCouponCampaigns } from "@/lib/campaigns";
 import { voidInvoice } from "@/lib/invoice";
 import { sendAdminAlert, sendMail } from "@/lib/mail";
+import { checkSchema, formatSchemaDriftAlert } from "@/lib/schema-check";
 import { getStripe } from "@/lib/stripe";
 import { mapSearchUrl, myBookingUrl, reviewUrl } from "@/lib/site-url";
 import { SELF_CHANGE_CUTOFF_HOURS } from "@/lib/change-request";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/cron/maintenance
  * 定期メンテナンス（Vercel Cron または 外部Cron(GAS等)から呼ぶ）:
+ * 0. DBスキーマのドリフト検知（マイグレーション適用漏れの検知・lib/schema-check.ts）
  * 1. 期限切れpendingの掃除（Webhook取りこぼしの保険）
  * 2. カレンダー同期失敗の再試行
  *
@@ -39,7 +41,24 @@ export async function GET(req: NextRequest) {
     remindersSent: 0,
     reviewRequestsSent: 0,
     coupons: { thanks: 0, secondVisit: 0, winback30: 0, winback90: 0 },
+    schemaDrift: { probed: 0, missing: [] as string[], inconclusive: [] as string[] },
   };
+
+  // -2. DBスキーマのドリフト検知（コードが前提とするテーブル/列/RPCが本番DBにあるか・読むだけ）
+  // マイグレーションの適用漏れを翌日までに気づけるようにする。問題が続く間は毎日アラートする
+  try {
+    const check = await checkSchema(db);
+    result.schemaDrift = {
+      probed: check.probed,
+      missing: check.missing.map((r) => `${r.migration}: ${r.target}`),
+      inconclusive: check.inconclusive.map((r) => `${r.migration}: ${r.target}`),
+    };
+    const alert = formatSchemaDriftAlert(check);
+    if (alert) await sendAdminAlert(alert.subject, alert.text);
+  } catch (e) {
+    console.error("[cron] スキーマ検査エラー:", e);
+    await sendAdminAlert("⚠️ DBスキーマ検査の実行に失敗", `エラー: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   // -1. 古い変更申請（pending 72h以上 / pending_payment 72h以上）を期限切れに
   const expiryCutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
