@@ -3,7 +3,9 @@ import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import AuthNav from "@/components/AuthNav";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import { CORPORATE_URL } from "@/lib/site-url";
 import "./globals.css";
+import "./seo-content.css";
 
 const notoSansJP = Noto_Sans_JP({
   subsets: ["latin"],
@@ -33,7 +35,7 @@ export const metadata: Metadata = {
   // 申告してしまい、Search Console で「代替ページ（適切なcanonicalタグあり）」になる。
   // トップページの canonical は src/app/page.tsx 側で自己参照として指定する。
   openGraph: {
-    siteName: "ブルースペース公式予約",
+    siteName: "ブルースペース",
     locale: "ja_JP",
     type: "website",
     url: SITE,
@@ -54,8 +56,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <header className="site-header">
           <div className="container header-inner">
+            {/* 表示名は「ブルースペース」に統一（WebSite構造化データ・GBP・og:site_nameと一致させる） */}
             <Link href="/" className="brand">
-              ブルーステージ レンタルスペース予約
+              ブルースペース <span className="brand-sub">公式予約</span>
             </Link>
             <nav className="header-nav">
               <Link href="/">拠点一覧</Link>
@@ -72,7 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/legal/terms">利用規約</Link>
               <Link href="/legal/privacy">プライバシーポリシー</Link>
               <Link href="/legal/tokushoho">特定商取引法に基づく表記</Link>
-              <a href="https://bluestage-lcc.com" target="_blank" rel="noopener noreferrer">
+              <a href={CORPORATE_URL} target="_blank" rel="noopener noreferrer">
                 運営会社（ブルーステージ合同会社）
               </a>
             </nav>

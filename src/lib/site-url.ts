@@ -8,6 +8,12 @@ export function siteUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
+/**
+ * 運営会社（ブルーステージ合同会社）のコーポレートサイト。
+ * wwwなし（https://bluestage-lcc.com）はHTTPSで接続できない（2026-09-25確認）ため、必ずwww付きを使う。
+ */
+export const CORPORATE_URL = "https://www.bluestage-lcc.com";
+
 /** 管理画面の予約詳細ページURL */
 export function adminBookingUrl(bookingId: string): string {
   return `${siteUrl()}/admin/bookings/${bookingId}`;

@@ -8,6 +8,7 @@ import { resolveTier } from "@/lib/entry-tier";
 import { resolveDayPricingBatch } from "@/lib/price-bands";
 import { minBandPrice } from "@/lib/pricing";
 import type { Venue } from "@/lib/types";
+import { CORPORATE_URL } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ const organizationJsonLd = {
   "@id": `${SITE}/#organization`,
   name: "ブルーステージ合同会社",
   legalName: "ブルーステージ合同会社",
-  url: "https://bluestage-lcc.com",
+  url: CORPORATE_URL,
   contactPoint: {
     "@type": "ContactPoint",
     contactType: "customer service",

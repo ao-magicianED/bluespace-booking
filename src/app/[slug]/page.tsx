@@ -20,6 +20,7 @@ import ReviewSection from "@/components/ReviewSection";
 import { aggregateReviews } from "@/lib/reviews";
 import { getPublishedReviews } from "@/lib/reviews-db";
 import { describePolicy } from "@/lib/cancellation";
+import { CORPORATE_URL } from "@/lib/site-url";
 import type { Venue, VenueOption } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +72,7 @@ export async function generateMetadata({
       title,
       description,
       url: `${SITE}/${slug}`,
-      siteName: "ブルースペース公式予約",
+      siteName: "ブルースペース",
       locale: "ja_JP",
       type: "website",
       images: [{ url: `${SITE}${content.photos.hero}`, width: 1200, height: 630 }],
@@ -232,7 +233,7 @@ export default async function VenuePage({
           parentOrganization: {
             "@type": "Organization",
             name: "ブルーステージ合同会社",
-            url: "https://bluestage-lcc.com",
+            url: CORPORATE_URL,
           },
         },
         {
@@ -493,7 +494,7 @@ export default async function VenuePage({
               長期・定期利用や法人でのご利用は{" "}
               <Link href={`/contact?type=longterm&venue=${venue.slug}`}>お問い合わせフォーム</Link>{" "}
               からお気軽にご相談ください（例: 月3回の定期利用のお見積もり）。 運営:{" "}
-              <Link href="https://bluestage-lcc.com" target="_blank" rel="noopener noreferrer">
+              <Link href={CORPORATE_URL} target="_blank" rel="noopener noreferrer">
                 ブルーステージ合同会社
               </Link>
             </p>

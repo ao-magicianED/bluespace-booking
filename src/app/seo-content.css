@@ -1,0 +1,12 @@
+/*
+ * SEO/AEO改修（2026-09）で追加した表示部品のスタイル。
+ * globals.css と分けているのは、並行する別PRとの競合を避けるため（値は globals.css の変数を使う）。
+ */
+
+/* ヘッダーのブランド表記「ブルースペース 公式予約」 */
+.brand .brand-sub {
+  font-size: 0.78rem;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-left: 0.3rem;
+}
