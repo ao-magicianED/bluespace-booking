@@ -5,6 +5,7 @@ import type { AvailabilityResponse, DaySlots, VenueOption } from "@/lib/types";
 import type { PriceBreakdown } from "@/lib/pricing";
 import PriceBandTable from "@/components/PriceBandTable";
 import { gaEvent } from "@/lib/gtag";
+import { formatPurpose, isUsageCategory, USAGE_CATEGORIES, type UsageCategory } from "@/lib/usage-categories";
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -121,8 +122,10 @@ export default function BookingGrid({
     name: initialForm?.name ?? "",
     email: initialForm?.email ?? "",
     phone: initialForm?.phone ?? "",
-    purpose: "",
+    purpose: "", // ご利用目的の「詳細」（自由記述・任意）
   });
+  // ご利用目的のカテゴリ（任意・""=未選択）。送信時に詳細と合わせて "[カテゴリ] 詳細" にする
+  const [purposeCategory, setPurposeCategory] = useState<UsageCategory | "">("");
   const [customerType, setCustomerType] = useState<"individual" | "corporate">(
     initialForm?.customerType ?? "individual"
   );
@@ -442,7 +445,8 @@ export default function BookingGrid({
           name: form.name,
           email: form.email,
           phone: form.phone,
-          purpose: form.purpose,
+          // APIの受け口は従来どおり purpose 1つ（カテゴリ未選択なら詳細だけ＝従来と同じ形）
+          purpose: formatPurpose(purposeCategory || null, form.purpose),
           optionIds: selectedOptionIds,
           couponCode: appliedCoupon,
           customerType,
@@ -922,13 +926,28 @@ export default function BookingGrid({
                 ))}
               </select>
             </div>
+            {/* ご利用目的はカテゴリ・詳細とも任意（離脱を増やさないため必須にしない） */}
             <div className="form-field">
               <label>ご利用目的（任意）</label>
+              <select
+                value={purposeCategory}
+                onChange={(e) => setPurposeCategory(isUsageCategory(e.target.value) ? e.target.value : "")}
+              >
+                <option value="">選択してください</option>
+                {USAGE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
+              <label>詳細（任意・社名や個人名は不要です）</label>
               <input
                 type="text"
                 value={form.purpose}
                 onChange={(e) => setForm({ ...form, purpose: e.target.value })}
-                placeholder="会議・撮影 など"
+                placeholder="例: 定例会議、商品撮影 など"
               />
             </div>
           </div>

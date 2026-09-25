@@ -33,6 +33,7 @@ type CheckoutBody = {
   name: string;
   email: string;
   phone: string;
+  /** 予約フォームは "[カテゴリ] 詳細"（usage-categories.ts の formatPurpose）で送る。旧来の自由記述もそのまま受け付ける */
   purpose?: string;
   optionIds?: string[];
   couponCode?: string;
