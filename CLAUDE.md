@@ -13,7 +13,8 @@
 ### `supabase/migrations/` にファイルを追加するPRのチェックリスト
 
 1. `src/lib/schema-manifest.ts` に同名のエントリを追加する（作ったテーブル・追加した列・コードが呼ぶRPC）。
-   忘れると `npm test`（schema-check.test.ts）が落ちる。
+   忘れると `npm test`（schema-check.test.ts）が落ちる。**CIが無いので、PRを出す前に必ず `npm test` を実行する**。
+   作り直し（同じ名前・引数での `create or replace`）や型・RLSだけの変更は外から確認できないので、`unverifiable` に理由を書く。
 2. PR本文に「本番適用が必要なマイグレーション: 00xx_名前.sql」と明記する。
 3. マージ後、**本番デプロイ（Vercel）の前に** 本番DB（project `ybvhjmyryztwjdnturrc`）へ `apply_migration` で適用する。
    追加だけのマイグレーションなら、先に適用しても稼働中の旧コードは壊れない。

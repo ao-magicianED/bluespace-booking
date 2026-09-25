@@ -39,6 +39,8 @@ export const SCHEMA_MANIFEST: MigrationManifestEntry[] = [
       venue_options: [],
       coupons: [],
     },
+    // 0010で作り直されているが、名前・引数が同じなので探査ではどちらの版かは区別できない（0010側を参照）
+    rpcs: { increment_coupon_use: ["p_code"] },
   },
   {
     migration: "0003_members",
@@ -74,7 +76,9 @@ export const SCHEMA_MANIFEST: MigrationManifestEntry[] = [
   },
   {
     migration: "0010_coupon_atomic_use",
-    rpcs: { increment_coupon_use: ["p_code"] },
+    unverifiable:
+      "increment_coupon_use(p_code) を同じ名前・引数で作り直しただけ（戻り値 void→boolean と使用上限の条件追加）。" +
+      "READ ONLYの探査では0002版と区別できない",
   },
   {
     migration: "0011_booking_adjustments",
