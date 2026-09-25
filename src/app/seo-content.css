@@ -130,7 +130,19 @@
   color: #cbd5e1;
 }
 
-/* トップH1: 語句の途中で改行しない */
+/* トップH1: 語句の途中で改行しない。スマホでは1行目に「東京のレンタルスペース・」が収まる文字サイズにする */
 .nowrap-phrase {
   display: inline-block;
+}
+.home-hero h1 {
+  font-size: clamp(1.5rem, 6.2vw, 2.7rem);
+}
+
+/*
+ * トップの装飾（.home-hero::before の right:-2rem）がスマホでページ幅を16pxはみ出し、
+ * 画面全体が横にスクロールしていた（2026-09-25 本番で確認・今回の改修前からの不具合）。
+ * clip は hidden と違いスクロール領域を作らないため、縦方向や sticky 要素に影響しない
+ */
+.home-hero {
+  overflow-x: clip;
 }

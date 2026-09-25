@@ -52,6 +52,18 @@ export default function VenueFacts({
       label: "主な設備",
       value: content.amenities.filter(isStandardAmenity).slice(0, 6).map((a) => a.label).join("・"),
     },
+    // オプション・持ち込みの設備は条件（注記）付きで別行に出す（施術ベッド等が表から消えないように）
+    ...(content.amenities.some((a) => !isStandardAmenity(a))
+      ? [
+          {
+            label: "オプション・持ち込み",
+            value: content.amenities
+              .filter((a) => !isStandardAmenity(a))
+              .map((a) => `${a.label}：${a.note}`)
+              .join(" ／ "),
+          },
+        ]
+      : []),
     { label: "入室方法", value: "予約確定メールでご案内（スタッフの立ち会いなし）" },
   ];
 
