@@ -10,7 +10,11 @@ import { getStripe } from "@/lib/stripe";
 import { mapSearchUrl, myBookingUrl, reviewUrl } from "@/lib/site-url";
 import { SELF_CHANGE_CUTOFF_HOURS } from "@/lib/change-request";
 import { utcToJstDateStr } from "@/lib/slots";
-import { REVIEW_REQUEST_COOLDOWN_DAYS, selectReviewRequestTargets } from "@/lib/reviews";
+import {
+  REVIEW_REQUEST_COOLDOWN_DAYS,
+  describeReviewDbError,
+  selectReviewRequestTargets,
+} from "@/lib/reviews";
 import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +45,8 @@ export async function GET(req: NextRequest) {
     priceAdjustmentsExpired: 0,
     remindersSent: 0,
     reviewRequestsSent: 0,
+    /** レビュー依頼対象の取得に失敗したときのエラー内容（正常時null。0件と失敗を区別するため） */
+    reviewRequestError: null as string | null,
     coupons: { thanks: 0, secondVisit: 0, winback30: 0, winback90: 0 },
     schemaDrift: { probed: 0, missing: [] as string[], inconclusive: [] as string[] },
   };
@@ -255,7 +261,7 @@ export async function GET(req: NextRequest) {
   // 請求書払い・直近に依頼済みのお客様は除外（法人の定期契約へ毎回送らない。selectReviewRequestTargets参照）
   try {
     const lookbackIso = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: ended } = await db
+    const { data: ended, error: endedError } = await db
       .from("bookings")
       .select("*")
       .eq("booking_status", "confirmed")
@@ -267,6 +273,12 @@ export async function GET(req: NextRequest) {
       .order("end_at", { ascending: true })
       .order("id", { ascending: true })
       .limit(200);
+    if (endedError) {
+      // supabase-jsはthrowしないため、ここで拾わないと「送信0件」と見分けがつかない
+      const message = describeReviewDbError("レビュー依頼対象の予約取得", endedError);
+      console.error("[cron]", message);
+      result.reviewRequestError = message;
+    }
     const candidates = (ended ?? []) as Booking[];
     const emails = [...new Set(candidates.map((b) => b.customer_email))];
     let recentlyRequested: string[] = [];
@@ -329,6 +341,7 @@ export async function GET(req: NextRequest) {
     }
   } catch (e) {
     console.error("[cron] レビュー依頼送信エラー:", e);
+    result.reviewRequestError ??= e instanceof Error ? e.message : String(e);
   }
 
   // 3. 自動クーポン配布（初回サンクス・30日/90日掘り起こし。冪等）

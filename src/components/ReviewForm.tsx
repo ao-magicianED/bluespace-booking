@@ -6,6 +6,7 @@ import {
   REVIEW_NAME_MAX,
   REVIEW_PURPOSE_MAX,
 } from "@/lib/reviews";
+import { USAGE_CATEGORIES } from "@/lib/usage-categories";
 
 const RATING_LABELS: Record<number, string> = {
   1: "残念だった",
@@ -15,16 +16,11 @@ const RATING_LABELS: Record<number, string> = {
   5: "とても良かった",
 };
 
-/** よく使われる用途の候補（タップで入力できるチップ） */
-const PURPOSE_SUGGESTIONS = [
-  "会議・打ち合わせ",
-  "セミナー・勉強会",
-  "パーティー・懇親会",
-  "レッスン・教室",
-  "撮影・収録",
-  "ボードゲーム会",
-  "その他",
-];
+/**
+ * 用途の候補（タップで入力できるチップ）。予約フォームのカテゴリと同じ一覧を使い、
+ * 予約時のカテゴリを初期値にしたときにチップが選択状態になるようにする
+ */
+const PURPOSE_SUGGESTIONS: readonly string[] = USAGE_CATEGORIES;
 
 export default function ReviewForm({
   token,

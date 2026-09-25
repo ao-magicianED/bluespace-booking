@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb, isDbConfigured } from "@/lib/supabase";
 import { isReviewEligible } from "@/lib/reviews";
+import { parsePurpose } from "@/lib/usage-categories";
 import { formatBookingPeriod } from "@/lib/confirm";
 import ReviewForm from "@/components/ReviewForm";
 import type { Booking } from "@/lib/types";
@@ -70,7 +71,9 @@ export default async function ReviewPage({
               : "このご予約はレビューを投稿できません。"}
         </div>
       ) : (
-        <ReviewForm token={token} initialPurpose={booking.purpose ?? ""} />
+        // 予約時に選んだカテゴリだけを初期値にする（レビューは公開されるため、
+        // "[カテゴリ] 詳細" の保存形式や自由記述（カテゴリ未選択の予約を含む）は載せない）
+        <ReviewForm token={token} initialPurpose={parsePurpose(booking.purpose).category ?? ""} />
       )}
 
       {booking.venues?.slug && (

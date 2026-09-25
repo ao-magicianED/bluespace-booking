@@ -95,6 +95,28 @@ export function selectReviewRequestTargets<
   return targets;
 }
 
+/**
+ * テーブル・列が存在しないときのエラーコード。
+ * 42P01=テーブルなし / 42703=列なし（Postgres）、PGRST205=テーブルなし / PGRST204=列なし（PostgRESTのスキーマキャッシュ）
+ */
+const MISSING_SCHEMA_CODES = new Set(["42P01", "42703", "PGRST204", "PGRST205"]);
+
+/**
+ * レビュー関連クエリのエラーをログ用の日本語メッセージにする（純粋関数）。
+ * supabase-js はクエリ失敗でthrowせず {error} を返すため、呼び出し側で必ずこれを通してログに残す
+ * （無視すると「レビュー0件」「依頼メール0通」に見えるだけで失敗に気づけない）。
+ */
+export function describeReviewDbError(
+  action: string,
+  error: { code?: string | null; message?: string | null }
+): string {
+  const code = error.code || "unknown";
+  const hint = MISSING_SCHEMA_CODES.has(code)
+    ? "（マイグレーション0016未適用の可能性: booking_reviews テーブルと bookings.review_token / review_request_sent_at 列を確認してください）"
+    : "";
+  return `${action}に失敗しました code=${code} message=${error.message ?? ""}${hint}`;
+}
+
 /** UUID形式の厳密チェック（DB側のcastエラー誘発を防ぐ） */
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
