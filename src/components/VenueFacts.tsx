@@ -2,7 +2,7 @@ import type { VenueContent } from "@/content/venues";
 import type { PriceBand } from "@/lib/pricing";
 import type { Venue } from "@/lib/types";
 import { describePolicy } from "@/lib/cancellation";
-import { describeHourlyPrice, describeOpeningHours, formatHours } from "@/lib/venue-facts";
+import { describeHourlyPrice, describeOpeningHours, formatHours, isStandardAmenity } from "@/lib/venue-facts";
 
 /**
  * 「スペース基本情報」表（サーバーコンポーネント）。
@@ -47,7 +47,11 @@ export default function VenueFacts({
     },
     { label: "キャンセル", value: describePolicy(venue.cancellation_policy ?? null).join(" ／ ") },
     { label: "飲食", value: "持ち込み可" },
-    { label: "主な設備", value: content.amenities.slice(0, 6).map((a) => a.label).join("・") },
+    {
+      // オプション（有料）・持ち込み前提の設備は備え付けと誤解されないよう「主な設備」には載せない
+      label: "主な設備",
+      value: content.amenities.filter(isStandardAmenity).slice(0, 6).map((a) => a.label).join("・"),
+    },
     { label: "入室方法", value: "予約確定メールでご案内（スタッフの立ち会いなし）" },
   ];
 

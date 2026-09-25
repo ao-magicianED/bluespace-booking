@@ -1,5 +1,6 @@
 import type { VenueContent } from "@/content/venues";
 import { CORPORATE_URL } from "./site-url";
+import { isStandardAmenity } from "./venue-facts";
 
 /**
  * 構造化データ（JSON-LD）の組み立て（純粋関数・単体テスト対象）。
@@ -54,6 +55,12 @@ export function gbpMapUrl(cid: string): string {
   return `https://maps.google.com/?cid=${cid}`;
 }
 
+function hhmm(hour: number): string {
+  const h = Math.floor(hour);
+  const m = Math.round((hour - h) * 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 function absolute(site: string, src: string): string {
   return /^https?:\/\//.test(src) ? src : `${site}${src}`;
 }
@@ -65,8 +72,11 @@ export function buildVenueJsonLd(opts: {
   priceRange: string;
   /** ヒーロー以外に載せる写真（ギャラリーの先頭数枚。相対パス可） */
   extraImages?: string[];
+  /** DBの営業時間（venues.open_hour / close_hour）。画面の表示と同じ値を渡す */
+  openHour: number;
+  closeHour: number;
 }): JsonLd {
-  const { site, content: c, priceRange, extraImages = [] } = opts;
+  const { site, content: c, priceRange, extraImages = [], openHour, closeHour } = opts;
   const url = `${site}/${c.slug}`;
   const images = [c.photos.hero, ...extraImages].map((src) => absolute(site, src));
   return {
@@ -93,7 +103,8 @@ export function buildVenueJsonLd(opts: {
     additionalProperty: [
       { "@type": "PropertyValue", name: "広さ", value: c.areaSqm, unitCode: "MTK", unitText: "㎡" },
     ],
-    amenityFeature: c.amenities.map((a) => ({
+    // value:true は「備え付けあり」の意味になるため、オプション・有償・持ち込み前提の設備は出さない
+    amenityFeature: c.amenities.filter(isStandardAmenity).map((a) => ({
       "@type": "LocationFeatureSpecification",
       name: a.label,
       value: true,
@@ -101,8 +112,9 @@ export function buildVenueJsonLd(opts: {
     openingHoursSpecification: {
       "@type": "OpeningHoursSpecification",
       dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-      opens: "00:00",
-      closes: "23:59",
+      // 24時間営業は Google 推奨の 00:00〜23:59 で表す
+      opens: hhmm(openHour),
+      closes: closeHour >= 24 ? "23:59" : hhmm(closeHour),
     },
     priceRange,
     currenciesAccepted: "JPY",

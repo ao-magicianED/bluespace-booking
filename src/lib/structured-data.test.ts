@@ -8,14 +8,20 @@ import {
   organizationId,
   serializeJsonLd,
 } from "./structured-data";
-import { describeDayBands, describeHourlyPrice, describeOpeningHours, formatHours } from "./venue-facts";
+import {
+  describeDayBands,
+  describeHourlyPrice,
+  describeOpeningHours,
+  formatHours,
+  isStandardAmenity,
+} from "./venue-facts";
 
 const SITE = "https://bluespacerental.com";
 
 describe("buildVenueJsonLd", () => {
   for (const c of Object.values(venueContents)) {
     it(`${c.slug}: GBP・定員・広さを持ち、aggregateRating を出さない`, () => {
-      const ld = buildVenueJsonLd({ site: SITE, content: c, priceRange: "¥1,000〜¥2,000/時間" });
+      const ld = buildVenueJsonLd({ site: SITE, content: c, priceRange: "¥1,000〜¥2,000/時間", openHour: 0, closeHour: 24 });
       expect(ld["@type"]).toBe("LocalBusiness");
       expect(ld.url).toBe(`${SITE}/${c.slug}`);
       // 自社レビューは星表示の対象外（自己宣伝レビュー）のため付けない
@@ -51,9 +57,38 @@ describe("buildVenueJsonLd", () => {
       site: SITE,
       content: c,
       priceRange: "x",
+      openHour: 0,
+      closeHour: 24,
       extraImages: [c.photos.hero, "https://example.supabase.co/a.jpg"],
     });
     expect(ld.image).toEqual([`${SITE}${c.photos.hero}`, "https://example.supabase.co/a.jpg"]);
+  });
+});
+
+describe("設備・営業時間", () => {
+  it("オプション・有償・持ち込み前提の設備は amenityFeature（備え付けあり）に載せない", () => {
+    const shirokane = buildVenueJsonLd({
+      site: SITE,
+      content: venueContents["shirokane-takanawa"],
+      priceRange: "x",
+      openHour: 0,
+      closeHour: 24,
+    });
+    const names = (shirokane.amenityFeature as { name: string }[]).map((a) => a.name);
+    expect(names).not.toContain("施術ベッド");
+    expect(names).not.toContain("プロジェクター");
+    expect(names).toContain("姿見鏡");
+    const ueno4a = buildVenueJsonLd({ site: SITE, content: venueContents["ueno-4a"], priceRange: "x", openHour: 0, closeHour: 24 });
+    expect((ueno4a.amenityFeature as { name: string }[]).map((a) => a.name)).not.toContain("撮影機材");
+    expect(isStandardAmenity({ label: "ゴミ持ち帰り不要", note: "スタッフ対応 ※有償" })).toBe(false);
+    expect(isStandardAmenity({ label: "ゴミ持ち帰り不要", note: "スタッフ対応" })).toBe(true);
+  });
+  it("営業時間はDBの値から作り、24時は 23:59 で表す", () => {
+    const c = venueContents["kanda"];
+    const h24 = buildVenueJsonLd({ site: SITE, content: c, priceRange: "x", openHour: 0, closeHour: 24 });
+    expect(h24.openingHoursSpecification).toMatchObject({ opens: "00:00", closes: "23:59" });
+    const day = buildVenueJsonLd({ site: SITE, content: c, priceRange: "x", openHour: 9, closeHour: 21.5 });
+    expect(day.openingHoursSpecification).toMatchObject({ opens: "09:00", closes: "21:30" });
   });
 });
 

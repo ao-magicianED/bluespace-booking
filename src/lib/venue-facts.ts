@@ -54,6 +54,15 @@ export function describeHourlyPrice(
     : `平日 ${yen(flat.hourly_price)} ／ 土日祝 ${yen(holiday)}`;
 }
 
+/**
+ * 拠点に常設されている設備か（オプション・有償・持ち込み前提のものは除く）。
+ * 「主な設備」や構造化データの amenityFeature（value:true＝備え付けあり）に、
+ * 追加料金や持ち込みが必要なものを「備え付け」として載せないために使う。
+ */
+export function isStandardAmenity(a: { label: string; note: string }): boolean {
+  return !/(オプション|有償|持ち込み|持込)/.test(`${a.label} ${a.note}`);
+}
+
 /** 営業時間の表記（0〜24時は24時間営業） */
 export function describeOpeningHours(openHour: number, closeHour: number): string {
   if (openHour === 0 && closeHour === 24) return "24時間営業（0:00〜24:00）";

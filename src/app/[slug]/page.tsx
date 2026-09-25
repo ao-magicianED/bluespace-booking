@@ -147,7 +147,11 @@ export default async function VenuePage({
 
   // FAQ: DBに拠点別FAQが設定されていればそれを使う（管理画面で編集可）。無ければコード内の拠点固有FAQ。
   // 全拠点共通の案内（COMMON_FAQS）は別枠で表示のみ（FAQPageはトップだけに付けて重複させない）
-  const dbFaqs = (venue.faqs ?? null) as { q: string; a: string }[] | null;
+  // DB側に共通FAQと同じ質問が入っていても、下の「共通のご利用案内」と重複表示・重複マークアップしない
+  const commonQuestions = new Set(COMMON_FAQS.map((f) => f.q));
+  const dbFaqs = ((venue.faqs ?? null) as { q: string; a: string }[] | null)?.filter(
+    (f) => !commonQuestions.has(f.q)
+  );
   const effectiveFaqs = dbFaqs && dbFaqs.length > 0 ? dbFaqs : (content?.faqs ?? []);
   const otherVenues = (othersResult.data ?? []) as {
     id: string;
@@ -197,6 +201,8 @@ export default async function VenuePage({
           site: SITE,
           content,
           priceRange,
+          openHour: venue.open_hour,
+          closeHour: venue.close_hour,
           extraImages: galleryToShow.flatMap((c) => c.images.slice(0, 1)).slice(0, 2).map((i) => i.src),
         }),
         buildBreadcrumbJsonLd(SITE, [
