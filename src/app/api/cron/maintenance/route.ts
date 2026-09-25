@@ -9,6 +9,7 @@ import { getStripe } from "@/lib/stripe";
 import { mapSearchUrl, myBookingUrl, reviewUrl } from "@/lib/site-url";
 import { SELF_CHANGE_CUTOFF_HOURS } from "@/lib/change-request";
 import { utcToJstDateStr } from "@/lib/slots";
+import { REVIEW_REQUEST_COOLDOWN_DAYS, selectReviewRequestTargets } from "@/lib/reviews";
 import type { Booking, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -228,17 +229,38 @@ export async function GET(req: NextRequest) {
 
   // 2-c. レビュー依頼メール（利用終了した確定予約に1回だけ送る・冪等）
   // 直近3日以内に終了した予約が対象（cron停止からの復旧時に古い予約へ大量送信しないための下限）
+  // 請求書払い・直近に依頼済みのお客様は除外（法人の定期契約へ毎回送らない。selectReviewRequestTargets参照）
   try {
     const lookbackIso = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     const { data: ended } = await db
       .from("bookings")
       .select("*")
       .eq("booking_status", "confirmed")
+      .neq("payment_method", "invoice") // 除外対象で200件の枠を埋めないようDB側でも絞る
       .is("review_request_sent_at", null)
       .lt("end_at", new Date().toISOString())
       .gt("end_at", lookbackIso)
+      // 並び順を固定し、並行実行時も同じお客様では同じ予約を選ぶ（→行単位の確保で片方が降りる）
+      .order("end_at", { ascending: true })
+      .order("id", { ascending: true })
       .limit(200);
-    for (const b of (ended ?? []) as Booking[]) {
+    const candidates = (ended ?? []) as Booking[];
+    const emails = [...new Set(candidates.map((b) => b.customer_email))];
+    let recentlyRequested: string[] = [];
+    if (emails.length > 0) {
+      const cooldownIso = new Date(
+        Date.now() - REVIEW_REQUEST_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString();
+      const { data: sent, error: sentError } = await db
+        .from("bookings")
+        .select("customer_email")
+        .in("customer_email", emails)
+        .gt("review_request_sent_at", cooldownIso);
+      // 確認できないまま送ると連投になりうるため、今回は送らず次回cronに回す
+      if (sentError) throw new Error(`レビュー依頼の送信履歴取得エラー: ${sentError.message}`);
+      recentlyRequested = (sent ?? []).map((r: { customer_email: string }) => r.customer_email);
+    }
+    for (const b of selectReviewRequestTargets(candidates, recentlyRequested)) {
       // 送信前にreview_request_sent_atを予約的に確保（cronの並行実行・タイムアウト再試行での
       // 二重送信を防ぐ）。まだnullの行だけ更新できた場合のみ「自分がこの予約を担当する」とみなす
       const { data: claimed } = await db

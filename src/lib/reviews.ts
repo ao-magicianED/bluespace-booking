@@ -67,6 +67,34 @@ export function isReviewEligible(
   return { ok: true };
 }
 
+/** 同じメールアドレスへのレビュー依頼メールの最短間隔（定期利用・リピーターへの連投防止） */
+export const REVIEW_REQUEST_COOLDOWN_DAYS = 90;
+
+/**
+ * レビュー依頼メールの送信先を選ぶ（純粋関数・cronで使用）。
+ * - 請求書払い（法人の定期契約など）には送らない
+ * - 直近 REVIEW_REQUEST_COOLDOWN_DAYS 日以内に依頼済みのメールアドレスには送らない
+ *   （手動決済リンクの定期利用・常連の個人も含め、同じお客様へは期間内1通まで）
+ * - 同じ回の候補に同じメールアドレスが複数あれば先頭の1件だけ
+ * メールアドレスは大文字小文字を区別せずに比較する。
+ * ※マイページのレビュー導線（isReviewEligible）はここに関係なく表示する（押し付けではないため）
+ */
+export function selectReviewRequestTargets<
+  T extends { payment_method: string; customer_email: string },
+>(candidates: T[], recentlyRequestedEmails: string[]): T[] {
+  const normalize = (email: string) => email.trim().toLowerCase();
+  const seen = new Set(recentlyRequestedEmails.map(normalize));
+  const targets: T[] = [];
+  for (const b of candidates) {
+    if (b.payment_method === "invoice") continue;
+    const email = normalize(b.customer_email);
+    if (seen.has(email)) continue;
+    seen.add(email);
+    targets.push(b);
+  }
+  return targets;
+}
+
 /** UUID形式の厳密チェック（DB側のcastエラー誘発を防ぐ） */
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
