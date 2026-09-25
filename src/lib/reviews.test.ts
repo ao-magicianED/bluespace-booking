@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateReviews,
+  describeReviewDbError,
   isReviewEligible,
   normalizeReviewInput,
   REVIEW_COMMENT_MAX,
@@ -144,6 +145,26 @@ describe("normalizeReviewInput", () => {
     const r = normalizeReviewInput({ rating: 4, comment: "1行目\n2行目\tタブ" });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.comment).toBe("1行目\n2行目\tタブ");
+  });
+});
+
+describe("describeReviewDbError", () => {
+  it("テーブル・列なしのコードにはマイグレーション0016未適用の可能性を添える", () => {
+    for (const code of ["42P01", "42703", "PGRST204", "PGRST205"]) {
+      const msg = describeReviewDbError("公開レビューの取得", { code, message: "missing" });
+      expect(msg).toContain(`code=${code}`);
+      expect(msg).toContain("message=missing");
+      expect(msg).toContain("マイグレーション0016未適用の可能性");
+    }
+  });
+
+  it("それ以外のエラーはコードとメッセージだけ", () => {
+    const msg = describeReviewDbError("公開レビューの取得", { code: "57014", message: "timeout" });
+    expect(msg).toBe("公開レビューの取得に失敗しました code=57014 message=timeout");
+  });
+
+  it("コード・メッセージが無くても落ちない", () => {
+    expect(describeReviewDbError("集計", {})).toBe("集計に失敗しました code=unknown message=");
   });
 });
 
