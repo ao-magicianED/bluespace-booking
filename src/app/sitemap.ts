@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getDb, isDbConfigured } from "@/lib/supabase";
-import { venueContents } from "@/content/venues";
+import { getVenueContent, venueContents } from "@/content/venues";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://bluespacerental.com";
 
@@ -41,9 +41,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         .select("slug, created_at")
         .eq("active", true);
       if (error) throw error;
+      // lastmod は本文の実際の更新日（venues.ts の contentUpdatedAt）。無い拠点だけ作成日を使う。
+      // Googleは lastmod が一貫して正確なサイトでだけ lastmod を信用するため、作成日のまま据え置かない
       venueSlugs = (venues ?? []).map((v) => ({
         slug: v.slug as string,
-        lastModified: (v.created_at as string | null)?.slice(0, 10) ?? latestVenueDate,
+        lastModified:
+          getVenueContent(v.slug as string)?.contentUpdatedAt ??
+          (v.created_at as string | null)?.slice(0, 10) ??
+          latestVenueDate,
       }));
     } catch (e) {
       console.error("[sitemap] venues取得に失敗。静的定義にフォールバックします", e);
@@ -51,7 +56,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   if (venueSlugs.length === 0) {
-    venueSlugs = Object.keys(venueContents).map((slug) => ({ slug, lastModified: latestVenueDate }));
+    venueSlugs = Object.values(venueContents).map((c) => ({
+      slug: c.slug,
+      lastModified: c.contentUpdatedAt,
+    }));
   }
 
   for (const v of venueSlugs) {

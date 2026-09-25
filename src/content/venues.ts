@@ -22,6 +22,20 @@ export type VenueContent = {
   postalCode: string;
   addressLocality: string;
   catchCopy: string;
+  /** 最大収容人数（構造化データ maximumAttendeeCapacity。capacityShort の「最大N名」と一致させる） */
+  maxCapacity: number;
+  /** 広さ（㎡・目安。capacityShort の表記と一致させる。共用部は含めない） */
+  areaSqm: number;
+  /**
+   * GoogleビジネスプロフィールのCID（https://maps.google.com/?cid=… で開ける店舗ID）。
+   * 構造化データの sameAs / hasMap に使い、サイトとGBPを同一の店舗として結び付ける。
+   * 2026-09-25 にGoogleマップで開き、店舗名・住所が一致することを確認済み。未確認なら null。
+   */
+  gbpCid: string | null;
+  /** トップページの拠点比較表の要約（本文に書いてある設備・用途から要約する。新しい事実は書かない） */
+  compare: { features: string; bestFor: string };
+  /** 拠点ページの本文を最後に更新した日（YYYY-MM-DD。サイトマップの lastmod。本文を変えたら更新する） */
+  contentUpdatedAt: string;
   /**
    * 検索結果向けのSEO設定。title / description 内の {price} は表示時に
    * DBの現在価格（例: ¥1,000/時間〜）へ置換される（価格改定に自動追随）。
@@ -39,6 +53,11 @@ export type VenueContent = {
   accessRows: { label: string; main: string; sub: string }[];
   nearby: { name: string; category: string; emoji: string; query: string }[];
   reviews: { initial: string; quote: string; name: string; role: string }[];
+  /**
+   * この拠点だけのFAQ（FAQPage構造化データはこれだけに付ける）。全拠点共通の案内は COMMON_FAQS。
+   * 同じQ&Aを全拠点ページにマークアップすると重複になるため分けている。
+   * 管理画面でDBの venues.faqs を設定した場合はそちらが優先される。
+   */
   faqs: { q: string; a: string }[];
   /** Googleマップ「共有→地図を埋め込む」の公式pb URL。無い場合は空文字（mapQueryフォールバック） */
   mapEmbedSrc: string;
@@ -51,8 +70,11 @@ export type VenueContent = {
   };
 };
 
-/** 全拠点共通のFAQ（予約システムの仕様に基づく） */
-const COMMON_FAQS = [
+/**
+ * 全拠点共通のFAQ（予約システムの仕様に基づく）。
+ * FAQPage構造化データはトップページだけに付け、拠点ページでは「共通のご利用案内」として表示のみ行う。
+ */
+export const COMMON_FAQS = [
   {
     q: "予約は何分単位でできますか？",
     a: "30分単位でご予約いただけます。連続した時間をまとめて選択でき、最大8時間まで一度に予約できます。",
@@ -137,6 +159,14 @@ export const venueContents: Record<string, VenueContent> = {
     postalCode: "133-0051",
     addressLocality: "江戸川区",
     catchCopy: "駅徒歩30秒・24時間営業。会議からパーティーまで使える多目的スペース",
+    maxCapacity: 20,
+    areaSqm: 26,
+    gbpCid: "1179604869354283257",
+    compare: {
+      features: "80インチスクリーン・55インチモニター・ボードゲーム備品",
+      bestFor: "会議・パーティー・ボードゲーム会・撮影",
+    },
+    contentUpdatedAt: "2026-09-25",
     seo: {
       title:
         "京成小岩駅徒歩30秒の格安レンタルスペース・貸し会議室【{price}】｜ブルースペース京成小岩",
@@ -216,7 +246,28 @@ export const venueContents: Record<string, VenueContent> = {
         role: "映画鑑賞会主催",
       },
     ],
-    faqs: COMMON_FAQS,
+    faqs: [
+      {
+        q: "何名まで利用できますか？",
+        a: "16名での利用が最適で、最大20名まで収容できます。広さは約26㎡で、2名がけテーブル8台・椅子20脚をご用意しています。",
+      },
+      {
+        q: "京成小岩駅からの行き方を教えてください。",
+        a: "京成本線「京成小岩駅」北口から徒歩30秒です。JR総武線「小岩駅」も徒歩圏内です。住所は東京都江戸川区北小岩6-11-2 エールプラザ京成小岩B101号室です。",
+      },
+      {
+        q: "パーティーやボードゲーム会に使えますか？",
+        a: "はい。飲食物の持ち込みは自由で、ボードゲーム備品・80インチスクリーン・55インチモニターを備えています。誕生日会・懇親会・ボードゲーム会・映画鑑賞などにご利用いただけます。",
+      },
+      {
+        q: "会議や研修に必要な設備はありますか？",
+        a: "ホワイトボード・3200ルーメンのプロジェクター・80インチスクリーン・Bluetoothマイク・高速光Wi-Fiを備えており、会議・面接・研修・セミナーにご利用いただけます。",
+      },
+      {
+        q: "ゴミは持ち帰る必要がありますか？",
+        a: "有償のゴミ回収オプションをご利用いただけます。オプションを付けない場合はお持ち帰りをお願いしています。",
+      },
+    ],
     mapEmbedSrc:
       "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d1619.7528028385912!2d139.8835091!3d35.742608!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x6018852a8f92a19d%3A0x105ecc60fd2ee0f9!2z5Lqs5oiQ5bCP5bKpL-ODrOODs-OCv-ODq-OCueODmuODvOOCuS_osrjjgZfkvJrorbDlrqQv44Oc44O844OJ44Ky44O844OgL-eglOS_ruaWveiorS_jgrnjgr_jgrjjgqov44OW44Or44O844K544Oa44O844K55Lqs5oiQ5bCP5bKp!5e0!3m2!1sja!2sjp!4v1779069961894!5m2!1sja!2sjp",
     mapQuery: "ブルースペース京成小岩",
@@ -243,6 +294,14 @@ export const venueContents: Record<string, VenueContent> = {
     postalCode: "101-0044",
     addressLocality: "千代田区",
     catchCopy: "神田駅徒歩1分・全面ミラーのフラッグシップ拠点。ダンスから研修まで",
+    maxCapacity: 20,
+    areaSqm: 20,
+    gbpCid: "202219848268700308",
+    compare: {
+      features: "全面ミラー・80インチスクリーン・マイク／スピーカー",
+      bestFor: "ダンス練習・稽古・研修・会議",
+    },
+    contentUpdatedAt: "2026-09-25",
     seo: {
       title: "神田駅徒歩1分の貸し会議室・レンタルスペース【{price}】｜ブルースペース神田",
       description:
@@ -324,7 +383,24 @@ export const venueContents: Record<string, VenueContent> = {
         role: "法人ユーザー",
       },
     ],
-    faqs: COMMON_FAQS,
+    faqs: [
+      {
+        q: "ダンスの練習に使えますか？",
+        a: "はい。全面ミラーを備えており、ダンス練習・レッスン、演劇の稽古、ウォーキングレッスンにご利用いただけます。Bluetoothスピーカーもございます。",
+      },
+      {
+        q: "何名まで利用できますか？",
+        a: "16名での利用が最適で、最大20名まで着席できます（テーブル8台・椅子20脚）。広さは室内約20㎡（共用部を含め約44㎡）です。",
+      },
+      {
+        q: "プロジェクターやマイクは使えますか？",
+        a: "はい。BenQプロジェクター＋80インチスクリーン・モニター・両面ホワイトボード・マイク・Bluetoothスピーカーなどの設備は、すべて無料でご利用いただけます。",
+      },
+      {
+        q: "最寄り駅はどこですか？",
+        a: "JR神田駅東口から徒歩1分、東京メトロ銀座線・神田駅から徒歩3分、JR秋葉原駅から徒歩8分です。",
+      },
+    ],
     mapEmbedSrc:
       "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d1619.7528028385912!2d139.7728167!3d35.6927341!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x60188dd3d48ab543%3A0x2ce6de16e96da94!2z44OW44Or44O844K544Oa44O844K556We55Sw!5e0!3m2!1sja!2sjp!4v1779069961894!5m2!1sja!2sjp",
     mapQuery: "ブルースペース神田",
@@ -351,6 +427,14 @@ export const venueContents: Record<string, VenueContent> = {
     postalCode: "110-0005",
     addressLocality: "台東区",
     catchCopy: "御徒町3分・上野6分。TVロケ実績ありの43㎡ワイド空間",
+    maxCapacity: 20,
+    areaSqm: 43,
+    gbpCid: "224281279008076373",
+    compare: {
+      features: "43㎡のワンフロア・80インチスクリーン・49型テレビ",
+      bestFor: "セミナー・会議・パーティー・撮影",
+    },
+    contentUpdatedAt: "2026-09-25",
     seo: {
       title:
         "御徒町駅徒歩3分・上野の貸し会議室・レンタルスペース【{price}】｜ブルースペース上野御徒町",
@@ -435,10 +519,27 @@ export const venueContents: Record<string, VenueContent> = {
         role: "セミナー主催者",
       },
     ],
-    faqs: COMMON_FAQS,
+    faqs: [
+      {
+        q: "最寄り駅はどこですか？",
+        a: "JR御徒町駅から徒歩3分、東京メトロ末広町駅から徒歩5分、JR上野駅から徒歩6分です。上野広小路駅・仲御徒町駅・上野御徒町駅も利用できます。",
+      },
+      {
+        q: "セミナーや研修で使えますか？",
+        a: "はい。約43㎡の地下1階ワンフロア貸切型で、プロジェクター＋80インチスクリーン・49型テレビ・大型ホワイトボード・有線マイクを備えています。セミナー・研修・勉強会にご利用いただけます。",
+      },
+      {
+        q: "1人でテレワークや自習に使えますか？",
+        a: "はい。30分単位で、24時間いつでもご予約いただけます。高速光Wi-Fiと有線LANケーブル（10m）を備えており、空きがあれば当日・利用直前でも予約できます。",
+      },
+      {
+        q: "撮影に使えますか？",
+        a: "はい。TV番組のロケ実績があり、機材を持ち込んでの撮影・インタビュー収録・YouTube収録にご利用いただけます。",
+      },
+    ],
     mapEmbedSrc: "",
     mapQuery: "ブルースペース上野御徒町",
-    geo: null,
+    geo: { lat: 35.7051487, lng: 139.7732052 },
     photos: {
       hero: "/venues/ueno-okachimachi/hero.jpg",
       categories: gallery("ueno-okachimachi", "ブルースペース上野御徒町", [
@@ -461,6 +562,14 @@ export const venueContents: Record<string, VenueContent> = {
     postalCode: "110-0005",
     addressLocality: "台東区",
     catchCopy: "上野駅徒歩1分の超駅近。4Bと連結で最大30名の研修にも",
+    maxCapacity: 20,
+    areaSqm: 26,
+    gbpCid: "7727100088588998633",
+    compare: {
+      features: "65インチモニター・100インチスクリーン・4Bと連結可",
+      bestFor: "会議・研修・セミナー（4Bと連結で最大30名）",
+    },
+    contentUpdatedAt: "2026-09-25",
     seo: {
       title: "上野駅徒歩1分の貸し会議室・レンタルスペース【{price}】｜ブルースペース上野駅前4A",
       description:
@@ -538,7 +647,28 @@ export const venueContents: Record<string, VenueContent> = {
         role: "セミナー主催者",
       },
     ],
-    faqs: COMMON_FAQS,
+    faqs: [
+      {
+        q: "隣の4Bと連結して使えますか？",
+        a: "はい。隣室の上野駅前4Bもあわせてご予約いただくと、最大30名規模の研修・セミナーや、2会場での同時開催に対応します。",
+      },
+      {
+        q: "何名まで利用できますか？",
+        a: "1室あたり18名での利用が最適で、最大20名まで収容できます（約26㎡）。4Bと連結すると最大30名規模に対応します。",
+      },
+      {
+        q: "早朝から使えますか？",
+        a: "はい。24時間営業のため、早朝の会議・研修や始業前のミーティングにもご利用いただけます。",
+      },
+      {
+        q: "車で行けますか？エレベーターはありますか？",
+        a: "建物の隣にコインパーキングがあります。エレベーターがあるので、機材の搬入もスムーズです。",
+      },
+      {
+        q: "最寄り駅はどこですか？",
+        a: "JR上野駅から徒歩1分、東京メトロ上野駅から徒歩2分です。",
+      },
+    ],
     mapEmbedSrc:
       "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d1619.7528028385912!2d139.7783914!3d35.7137818!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x60188fb655956185%3A0x6b3c2c97343c97e9!2z5LiK6YeO6aeFL-iyuOOBl-S8muitsOWupOODu-OCueOCv-OCuOOCqi_jg5bjg6vjg7zjgrnjg5rjg7zjgrnkuIrph47pp4XliY00QSg0MDEp!5e0!3m2!1sja!2sjp!4v1779069961894!5m2!1sja!2sjp",
     mapQuery: "ブルースペース上野駅前4A",
@@ -564,6 +694,14 @@ export const venueContents: Record<string, VenueContent> = {
     postalCode: "110-0005",
     addressLocality: "台東区",
     catchCopy: "100インチ大型スクリーン搭載。配信・収録・セミナーの上野拠点",
+    maxCapacity: 20,
+    areaSqm: 26,
+    gbpCid: "9205166400578031420",
+    compare: {
+      features: "100インチスクリーン・撮影機材一式・4Aと連結可",
+      bestFor: "セミナー・配信・収録・上映会",
+    },
+    contentUpdatedAt: "2026-09-25",
     seo: {
       title:
         "上野駅徒歩1分・100インチ大画面のレンタルスペース・貸し会議室【{price}】｜ブルースペース上野駅前4B",
@@ -641,7 +779,28 @@ export const venueContents: Record<string, VenueContent> = {
         role: "ライブ配信",
       },
     ],
-    faqs: COMMON_FAQS,
+    faqs: [
+      {
+        q: "100インチスクリーンでセミナーや上映会ができますか？",
+        a: "はい。100インチ大型スクリーンとビジネスプロジェクターを備えており、セミナー・研修・プレゼン、上映会やスポーツ観戦にご利用いただけます。",
+      },
+      {
+        q: "隣の4Aと連結して使えますか？",
+        a: "はい。隣室の上野駅前4Aもあわせてご予約いただくと、最大30名規模のセミナー・研修・イベントに対応します。",
+      },
+      {
+        q: "配信や収録に使えますか？",
+        a: "はい。撮影機材一式と業務用ルーターの高速光Wi-Fiを備えており、ウェビナー配信・YouTube収録・ライブ配信にご利用いただけます。",
+      },
+      {
+        q: "1人で作業やテレワークに使えますか？",
+        a: "はい。30分単位で、24時間いつでもご予約いただけます。業務用ルーターの高速光Wi-Fiを備えており、空きがあれば当日・利用直前でも予約できます。",
+      },
+      {
+        q: "何名まで利用できますか？",
+        a: "18名での利用が最適で、最大20名まで収容できます（約26㎡）。4Aと連結すると最大30名規模に対応します。",
+      },
+    ],
     mapEmbedSrc:
       "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d1619.7528028385912!2d139.778391!3d35.713782!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x60188fe7cf201021%3A0x7fbf5211fcd08f3c!2z5LiK6YeO6aeFL-iyuOOBl-S8muitsOWupOODu-OCueOCv-OCuOOCqi_jg5bjg6vjg7zjgrnjg5rjg7zjgrnkuIrph47pp4XliY00Qig0MDIp!5e0!3m2!1sja!2sjp!4v1779069961894!5m2!1sja!2sjp",
     mapQuery: "ブルースペース上野駅前4B",
@@ -667,6 +826,14 @@ export const venueContents: Record<string, VenueContent> = {
     postalCode: "160-0023",
     addressLocality: "新宿区",
     catchCopy: "新宿3駅圏内のビジネス特化スペース。会議・面接・商談に",
+    maxCapacity: 12,
+    areaSqm: 20,
+    gbpCid: "15147143464317734834",
+    compare: {
+      features: "55インチモニター・Webカメラ・グリーンスクリーン",
+      bestFor: "会議・面接・Web会議・撮影",
+    },
+    contentUpdatedAt: "2026-09-25",
     seo: {
       title:
         "西新宿・新宿の商談・面接向け貸し会議室・レンタルスペース【{price}】｜ブルースペース西新宿403",
@@ -742,7 +909,28 @@ export const venueContents: Record<string, VenueContent> = {
         role: "EC運営",
       },
     ],
-    faqs: COMMON_FAQS,
+    faqs: [
+      {
+        q: "何名まで利用できますか？",
+        a: "8名での利用が最適で、最大12名まで利用できます（約20㎡）。",
+      },
+      {
+        q: "当日や夜遅くでも予約できますか？",
+        a: "はい。24時間営業で、空きがあれば利用開始の直前まで予約できます。早朝・夜間の会議や面接にもご利用いただけます。",
+      },
+      {
+        q: "オンライン会議やWeb面接に対応していますか？",
+        a: "はい。Web会議用カメラ・55インチ大型モニター・高速光Wi-Fiを備えており、オンライン商談やWeb面接にそのまま対応します。",
+      },
+      {
+        q: "グリーンスクリーンでの撮影はできますか？",
+        a: "はい。クロマキー合成用のグリーンスクリーンを備えており、動画撮影・オンライン配信にご利用いただけます。",
+      },
+      {
+        q: "最寄り駅はどこですか？",
+        a: "西武新宿駅・都営大江戸線「都庁前駅」から徒歩7分、新宿駅から徒歩10分です。東京メトロ丸ノ内線「西新宿駅」も利用できます。",
+      },
+    ],
     mapEmbedSrc:
       "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d1619.7528028385912!2d139.695814!3d35.6950219!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x60188d753039ac79%3A0xd23576ba5089cfb2!2z44OW44Or44O844K544Oa44O844K56KW_5paw5a6_NDAz!5e0!3m2!1sja!2sjp!4v1779069961894!5m2!1sja!2sjp",
     mapQuery: "ブルースペース西新宿403",
@@ -769,6 +957,14 @@ export const venueContents: Record<string, VenueContent> = {
     postalCode: "108-0072",
     addressLocality: "港区",
     catchCopy: "施術ベッド完備の白金サロンスペース。エステ・ネイル・ポップアップに",
+    maxCapacity: 6,
+    areaSqm: 16,
+    gbpCid: "11771641806119706910",
+    compare: {
+      features: "施術ベッド（オプション）・姿見鏡・NURO光Wi-Fi",
+      bestFor: "サロン・施術・少人数会議",
+    },
+    contentUpdatedAt: "2026-09-25",
     seo: {
       title:
         "白金高輪駅徒歩7分のレンタルサロン・レンタルスペース【{price}】｜ブルースペース白金高輪",
@@ -847,7 +1043,24 @@ export const venueContents: Record<string, VenueContent> = {
         role: "プライベート利用",
       },
     ],
-    faqs: COMMON_FAQS,
+    faqs: [
+      {
+        q: "施術ベッドは使えますか？",
+        a: "はい。施術ベッドをオプションでご用意しています。姿見鏡・スリッパ・水回りも備えており、エステ・ネイル・整体などのサロン利用に対応します。",
+      },
+      {
+        q: "何名まで利用できますか？",
+        a: "4〜6名での利用が最適で、最大6名まで利用できます（約16㎡・2名がけテーブル2台／椅子6脚）。",
+      },
+      {
+        q: "少人数の会議やWeb会議に使えますか？",
+        a: "はい。NURO光Wi-Fi・モニター・ホワイトボードを備えており、少人数の打ち合わせ・面接・Web会議にご利用いただけます。",
+      },
+      {
+        q: "最寄り駅はどこですか？",
+        a: "東京メトロ南北線・都営三田線「白金高輪駅」から徒歩7分です。JR高輪ゲートウェイ駅からも徒歩圏内です。",
+      },
+    ],
     mapEmbedSrc:
       "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d1619.7528028385912!2d139.7300219!3d35.6467668!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x60188beff8cffe35%3A0xa35d45da94e7211e!2z44OW44Or44O844K544Oa44O844K555m96YeR6auY6LyqL-iyuOOBl-S8muitsOWupC_jg6zjg7Pjgr_jg6vjgrnjg5rjg7zjgrkv44Os44Oz44K_44Or44K144Ot44OzL-Wwj-imj-aooeOCteODreODs-KAouWhvuODrOODs-OCv-ODqw!5e0!3m2!1sja!2sjp!4v1779069961894!5m2!1sja!2sjp",
     mapQuery: "ブルースペース白金高輪",
@@ -868,3 +1081,15 @@ export const venueContents: Record<string, VenueContent> = {
 export function getVenueContent(slug: string): VenueContent | null {
   return venueContents[slug] ?? null;
 }
+
+/**
+ * エリアごとの拠点の並び（トップの比較表・フッターのリンクで使う）。
+ * 拠点を追加・休止したらここも更新する（フッターはDBを見ない静的リンクのため）。
+ */
+export const VENUE_AREAS: { area: string; slugs: string[] }[] = [
+  { area: "上野・御徒町", slugs: ["ueno-okachimachi", "ueno-4a", "ueno-4b"] },
+  { area: "神田", slugs: ["kanda"] },
+  { area: "西新宿", slugs: ["nishi-shinjuku"] },
+  { area: "京成小岩", slugs: ["keisei-koiwa"] },
+  { area: "白金高輪", slugs: ["shirokane-takanawa"] },
+];
