@@ -4,6 +4,7 @@ import {
   isReviewEligible,
   normalizeReviewInput,
   REVIEW_COMMENT_MAX,
+  selectReviewRequestTargets,
   UUID_RE,
 } from "./reviews";
 
@@ -50,6 +51,42 @@ describe("isReviewEligible", () => {
     // now(JST 7/10 12:00 = UTC 7/10 03:00) の30日前 = UTC 6/10 03:00
     const b = { booking_status: "confirmed", end_at: "2026-06-10T03:00:00.000Z" };
     expect(isReviewEligible(b, now)).toEqual({ ok: true });
+  });
+});
+
+describe("selectReviewRequestTargets", () => {
+  const card = (id: string, email: string) => ({ id, payment_method: "card", customer_email: email });
+
+  it("カード払いで依頼履歴がなければ送る", () => {
+    const r = selectReviewRequestTargets([card("a", "a@example.com")], []);
+    expect(r.map((b) => b.id)).toEqual(["a"]);
+  });
+
+  it("請求書払い（法人の定期契約等）には送らない", () => {
+    const invoice = { id: "i", payment_method: "invoice", customer_email: "corp@example.com" };
+    expect(selectReviewRequestTargets([invoice], [])).toEqual([]);
+  });
+
+  it("直近に依頼済みのメールアドレスには送らない（大文字小文字・前後空白は無視）", () => {
+    const r = selectReviewRequestTargets(
+      [card("a", "Repeat@Example.com"), card("b", "new@example.com")],
+      [" repeat@example.com "]
+    );
+    expect(r.map((b) => b.id)).toEqual(["b"]);
+  });
+
+  it("同じ回に同じお客様の予約が複数あっても1通だけ", () => {
+    const r = selectReviewRequestTargets(
+      [card("a", "same@example.com"), card("b", "SAME@example.com"), card("c", "other@example.com")],
+      []
+    );
+    expect(r.map((b) => b.id)).toEqual(["a", "c"]);
+  });
+
+  it("請求書払いの予約は同じ回のカード払い予約の送信を妨げない", () => {
+    const invoice = { id: "i", payment_method: "invoice", customer_email: "mix@example.com" };
+    const r = selectReviewRequestTargets([invoice, card("c", "mix@example.com")], []);
+    expect(r.map((b) => b.id)).toEqual(["c"]);
   });
 });
 
