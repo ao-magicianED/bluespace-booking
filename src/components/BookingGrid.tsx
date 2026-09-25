@@ -928,8 +928,9 @@ export default function BookingGrid({
             </div>
             {/* ご利用目的はカテゴリ・詳細とも任意（離脱を増やさないため必須にしない） */}
             <div className="form-field">
-              <label>ご利用目的（任意）</label>
+              <label htmlFor="booking-purpose-category">ご利用目的（任意）</label>
               <select
+                id="booking-purpose-category"
                 value={purposeCategory}
                 onChange={(e) => setPurposeCategory(isUsageCategory(e.target.value) ? e.target.value : "")}
               >
@@ -942,8 +943,9 @@ export default function BookingGrid({
               </select>
             </div>
             <div className="form-field">
-              <label>詳細（任意・社名や個人名は不要です）</label>
+              <label htmlFor="booking-purpose-detail">ご利用目的の詳細（任意・社名や個人名は不要です）</label>
               <input
+                id="booking-purpose-detail"
                 type="text"
                 value={form.purpose}
                 onChange={(e) => setForm({ ...form, purpose: e.target.value })}

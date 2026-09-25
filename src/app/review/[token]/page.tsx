@@ -71,12 +71,9 @@ export default async function ReviewPage({
               : "このご予約はレビューを投稿できません。"}
         </div>
       ) : (
-        // 予約時に選んだカテゴリがあればそれだけを初期値にする（レビューは公開されるため、
-        // "[カテゴリ] 詳細" の保存形式や詳細の自由記述をそのまま載せない）
-        <ReviewForm
-          token={token}
-          initialPurpose={parsePurpose(booking.purpose).category ?? booking.purpose ?? ""}
-        />
+        // 予約時に選んだカテゴリだけを初期値にする（レビューは公開されるため、
+        // "[カテゴリ] 詳細" の保存形式や自由記述（カテゴリ未選択の予約を含む）は載せない）
+        <ReviewForm token={token} initialPurpose={parsePurpose(booking.purpose).category ?? ""} />
       )}
 
       {booking.venues?.slug && (
