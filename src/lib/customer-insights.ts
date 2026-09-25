@@ -43,6 +43,17 @@ export type PurposeBucket = UsageCategory | "自由記述のみ" | "未記入";
 /** テスト予約とみなす目的の文言（E2E・動作確認など） */
 export const TEST_PURPOSE_RE = /e2e|テスト|動作確認|test/i;
 
+/**
+ * 上の文言を含んでも実際の利用目的としてあり得る表現（部分一致の誤除外を防ぐ）。
+ * 例: 「コンテスト作品の撮影」「テスト勉強」「latest」
+ */
+const TEST_PURPOSE_FALSE_POSITIVE_RE = /コンテスト|テスト(?:勉強|対策|期間|前)|contest|latest/gi;
+
+/** 目的がテスト予約か（誤除外しやすい表現を取り除いてから判定する） */
+export function isTestPurpose(purpose: string | null | undefined): boolean {
+  return TEST_PURPOSE_RE.test((purpose ?? "").replace(TEST_PURPOSE_FALSE_POSITIVE_RE, ""));
+}
+
 export type SegmentStats = {
   bookings: number;
   /** 集計対象の全予約に占める割合（0〜1） */
@@ -240,7 +251,7 @@ export function computeCustomerInsights(
   for (const b of rows) {
     if (excludedEmails.has(normalizeEmail(b.customer_email))) {
       internalEmail++;
-    } else if (TEST_PURPOSE_RE.test(b.purpose ?? "")) {
+    } else if (isTestPurpose(b.purpose)) {
       testPurpose++;
     } else {
       included.push(b);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeCustomerInsights,
   dayTypeOf,
+  isTestPurpose,
   leadTimeBucket,
   parseEmailList,
   purposeBucket,
@@ -38,6 +39,32 @@ describe("parseEmailList", () => {
     expect(parseEmailList(undefined).size).toBe(0);
     expect(parseEmailList("").size).toBe(0);
     expect(parseEmailList(null).size).toBe(0);
+  });
+});
+
+describe("isTestPurpose", () => {
+  it("E2E・テスト・動作確認・test を含む目的はテスト予約", () => {
+    expect(isTestPurpose("E2E")).toBe(true);
+    expect(isTestPurpose("[その他] 決済テスト")).toBe(true);
+    expect(isTestPurpose("動作確認")).toBe(true);
+    expect(isTestPurpose("Test booking")).toBe(true);
+  });
+
+  it("実際の利用目的としてあり得る表現は誤除外しない", () => {
+    expect(isTestPurpose("[撮影・配信] コンテスト作品の撮影")).toBe(false);
+    expect(isTestPurpose("[テレワーク・作業・自習] テスト勉強")).toBe(false);
+    expect(isTestPurpose("テスト対策の自習")).toBe(false);
+    expect(isTestPurpose("dance contest practice")).toBe(false);
+    expect(isTestPurpose("latest demo")).toBe(false);
+  });
+
+  it("誤除外対策の表現と本物のテスト文言が両方あればテスト予約", () => {
+    expect(isTestPurpose("コンテスト 動作確認")).toBe(true);
+  });
+
+  it("空・null はテストではない", () => {
+    expect(isTestPurpose("")).toBe(false);
+    expect(isTestPurpose(null)).toBe(false);
   });
 });
 
