@@ -45,6 +45,19 @@ describe("buildVenueJsonLd", () => {
     }
   });
 
+  it("本文・SEOセクションの「最大N名」も maxCapacity と一致する（連結時の人数は除く）", () => {
+    for (const c of Object.values(venueContents)) {
+      const texts = [c.overview, ...c.seo.sections.map((x) => x.body)];
+      for (const t of texts) {
+        for (const m of t.matchAll(/最大(\d+)名/g)) {
+          const around = t.slice(Math.max(0, m.index! - 12), m.index!);
+          if (/連結/.test(around)) continue; // 4A+4B連結時の「最大30名」
+          expect(Number(m[1]), `${c.slug}: ${t.slice(0, 30)}…`).toBe(c.maxCapacity);
+        }
+      }
+    }
+  });
+
   it("GBPのCIDは数字のみ（URLに直接埋め込むため）", () => {
     for (const c of Object.values(venueContents)) {
       if (c.gbpCid) expect(c.gbpCid, c.slug).toMatch(/^\d+$/);

@@ -20,6 +20,8 @@ const TARGET_FILES = [
   "src/app/manifest.ts",
   "src/app/opengraph-image.tsx",
   "src/content/venues.ts",
+  "src/content/use-case-guide.ts",
+  "src/components/VenueFacts.tsx",
 ];
 
 describe("禁止語ガード（対外価格表現）", () => {

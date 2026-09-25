@@ -103,7 +103,9 @@ export default async function HomePage() {
       <section className="home-hero">
         <span className="hero-eyebrow">公式予約・仲介手数料なし</span>
         <h1>
-          東京のレンタルスペース・貸し会議室
+          {/* 「・」は行頭禁則のため、語の途中で改行されないよう語句単位で折り返す */}
+          <span className="nowrap-phrase">東京のレンタルスペース・</span>
+          <span className="nowrap-phrase">貸し会議室</span>
           <br />
           <span className="accent">ブルースペース</span>
         </h1>
