@@ -6,7 +6,7 @@ import { parsePurpose, USAGE_CATEGORIES, type UsageCategory } from "./usage-cate
  * 環境変数・DB・現在時刻には触れない（除外メールや祝日は呼び出し側から渡す）。
  *
  * - 同一顧客: メールアドレスを trim + 小文字化して一致したもの
- * - 予約単位の区分: 顧客ごとに created_at（予約した日時）順に並べ、1件目=初回 / 2件目以降=リピート
+ * - 予約単位の区分: 顧客ごとに created_at（申込日時）順に並べ、1件目=初回 / 2件目以降=リピート
  * - 顧客単位のリピーター: 「別のJST日付」の予約が2つ以上ある顧客（同日の分割予約は1回と数える）
  */
 
@@ -40,18 +40,24 @@ export type StartHourBucket = (typeof START_HOUR_BUCKETS)[number];
 export const PURPOSE_BUCKETS = [...USAGE_CATEGORIES, "自由記述のみ", "未記入"] as const;
 export type PurposeBucket = UsageCategory | "自由記述のみ" | "未記入";
 
-/** テスト予約とみなす目的の文言（E2E・動作確認など） */
-export const TEST_PURPOSE_RE = /e2e|テスト|動作確認|test/i;
-
-/**
- * 上の文言を含んでも実際の利用目的としてあり得る表現（部分一致の誤除外を防ぐ）。
- * 例: 「コンテスト作品の撮影」「テスト勉強」「latest」
+/*
+ * テスト予約の判定（カテゴリを除いた「詳細」で判定する）。
+ * 「テスト撮影」「配信テスト」「Webテスト受験」「音響テスト」「カメラの動作確認」など、
+ * 実際の利用目的にも「テスト」「動作確認」は現れるため部分一致では判定しない。
+ * 除外は予約単位なので、実在の顧客の1件目を誤って落とすと2件目が「初回」に化けて集計が歪む。
+ * 次のどれかに当たるものだけをテスト予約とする。
  */
-const TEST_PURPOSE_FALSE_POSITIVE_RE = /コンテスト|テスト(?:勉強|対策|期間|前)|contest|latest/gi;
+/** E2E を含む（実際の利用目的には現れない語） */
+const E2E_RE = /\be2e\b/i;
+/** 詳細全体がテストの目印だけ（「テスト」「TEST」「動作確認」「テスト予約」「Test booking」など） */
+const TEST_ONLY_RE = /^(?:テスト|test|動作確認)(?:\s*(?:予約|用|中|です|booking|run))*[\s。.!]*$/i;
+/** 決済・予約まわりのテスト（「決済テスト」「予約システムの動作確認」「checkout test」など） */
+const SYSTEM_TEST_RE = /(?:決済|予約|stripe|webhook|checkout)(?:システム)?\s*の?\s*(?:テスト|test|動作確認)/i;
 
-/** 目的がテスト予約か（誤除外しやすい表現を取り除いてから判定する） */
+/** 目的がテスト予約か（全角英数・半角カナは NFKC で揃えてから判定する） */
 export function isTestPurpose(purpose: string | null | undefined): boolean {
-  return TEST_PURPOSE_RE.test((purpose ?? "").replace(TEST_PURPOSE_FALSE_POSITIVE_RE, ""));
+  const { detail } = parsePurpose((purpose ?? "").normalize("NFKC"));
+  return E2E_RE.test(detail) || TEST_ONLY_RE.test(detail) || SYSTEM_TEST_RE.test(detail);
 }
 
 export type SegmentStats = {
@@ -132,7 +138,7 @@ function jstHourOf(iso: string): number {
   return new Date(Date.parse(iso) + JST_OFFSET_MS).getUTCHours();
 }
 
-/** 予約日時（created_at）から利用開始（start_at）までの長さで分類する。負値（後から登録した予約等）は当日扱い */
+/** 申込日時（created_at）から利用開始（start_at）までの長さで分類する。負値（後から登録した予約等）は当日扱い */
 export function leadTimeBucket(createdAt: string, startAt: string): LeadTimeBucket {
   const hours = (Date.parse(startAt) - Date.parse(createdAt)) / 3600000;
   if (hours < 24) return "当日（24時間以内）";
@@ -258,7 +264,7 @@ export function computeCustomerInsights(
     }
   }
 
-  // ── 顧客ごとに予約日時順へ並べて初回/リピートを振り分ける ──
+  // ── 顧客ごとに申込日時順へ並べて初回/リピートを振り分ける ──
   const byCustomer = new Map<string, InsightBooking[]>();
   for (const b of included) {
     const key = normalizeEmail(b.customer_email);

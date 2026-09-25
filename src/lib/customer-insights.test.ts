@@ -43,11 +43,21 @@ describe("parseEmailList", () => {
 });
 
 describe("isTestPurpose", () => {
-  it("E2E・テスト・動作確認・test を含む目的はテスト予約", () => {
+  it("E2E・テストの目印だけの目的・決済/予約のテストはテスト予約", () => {
     expect(isTestPurpose("E2E")).toBe(true);
+    expect(isTestPurpose("E2E run")).toBe(true);
     expect(isTestPurpose("[その他] 決済テスト")).toBe(true);
+    expect(isTestPurpose("予約システムの動作確認")).toBe(true);
     expect(isTestPurpose("動作確認")).toBe(true);
+    expect(isTestPurpose("テスト予約です。")).toBe(true);
     expect(isTestPurpose("Test booking")).toBe(true);
+    expect(isTestPurpose("ＴＥＳＴ")).toBe(true); // 全角
+    expect(isTestPurpose("ﾃｽﾄ")).toBe(true); // 半角カナ
+  });
+
+  it("カテゴリを選んでいても詳細がテストの目印だけならテスト予約", () => {
+    expect(isTestPurpose("[その他] 動作確認")).toBe(true);
+    expect(isTestPurpose("[会議・打ち合わせ] test")).toBe(true);
   });
 
   it("実際の利用目的としてあり得る表現は誤除外しない", () => {
@@ -56,10 +66,18 @@ describe("isTestPurpose", () => {
     expect(isTestPurpose("テスト対策の自習")).toBe(false);
     expect(isTestPurpose("dance contest practice")).toBe(false);
     expect(isTestPurpose("latest demo")).toBe(false);
-  });
-
-  it("誤除外対策の表現と本物のテスト文言が両方あればテスト予約", () => {
-    expect(isTestPurpose("コンテスト 動作確認")).toBe(true);
+    expect(isTestPurpose("[テレワーク・作業・自習] Webテスト受験")).toBe(false);
+    expect(isTestPurpose("SPIテスト受験")).toBe(false);
+    expect(isTestPurpose("[撮影・配信] テスト撮影")).toBe(false);
+    expect(isTestPurpose("[撮影・配信] 配信テスト")).toBe(false);
+    expect(isTestPurpose("テスト配信")).toBe(false);
+    expect(isTestPurpose("カメラテスト")).toBe(false);
+    expect(isTestPurpose("マイクテスト")).toBe(false);
+    expect(isTestPurpose("[セミナー・研修・勉強会] 模擬テスト会場")).toBe(false);
+    expect(isTestPurpose("[演劇・音楽の練習] 音響テスト")).toBe(false);
+    expect(isTestPurpose("音響システムのテスト")).toBe(false);
+    expect(isTestPurpose("配信機材の動作確認")).toBe(false);
+    expect(isTestPurpose("コンテスト 動作確認")).toBe(false);
   });
 
   it("空・null はテストではない", () => {
@@ -170,6 +188,23 @@ describe("computeCustomerInsights", () => {
     });
     expect(r.excluded.internalEmail).toBe(1);
     expect(r.totalBookings).toBe(0);
+  });
+
+  it("「テスト撮影」など実利用の1件目を除外せず、2件目を初回に化けさせない", () => {
+    const rows = [
+      booking({ purpose: "[撮影・配信] テスト撮影", created_at: "2026-07-01T00:00:00.000Z" }),
+      booking({
+        purpose: "[撮影・配信] 本番撮影",
+        created_at: "2026-07-10T00:00:00.000Z",
+        start_at: "2026-07-20T01:00:00.000Z",
+        end_at: "2026-07-20T03:00:00.000Z",
+      }),
+    ];
+    const r = computeCustomerInsights(rows);
+    expect(r.excluded.testPurpose).toBe(0);
+    expect(r.segments.初回.bookings).toBe(1);
+    expect(r.segments.リピート.bookings).toBe(1);
+    expect(r.customers.repeaters).toBe(1);
   });
 
   it("顧客ごとに created_at 順で1件目=初回・2件目以降=リピート（利用日順ではない）", () => {

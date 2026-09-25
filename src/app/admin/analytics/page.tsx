@@ -238,11 +238,11 @@ export default async function AdminAnalyticsPage() {
       <h2 className="analytics-h">🔁 新規とリピーターの特徴</h2>
       <p className="policy">
         社内・テスト予約{insights.excluded.total}件（社内メール{insights.excluded.internalEmail}件・目的がテスト
-        {insights.excluded.testPurpose}件）を除外。社内メールは環境変数 INTERNAL_EMAILS（カンマ区切り）で設定
-        {internalEmails.size ? `（現在${internalEmails.size}件）` : "（未設定）"}。
+        {insights.excluded.testPurpose}件）を除外。社内メールは環境変数 INTERNAL_EMAILS（カンマ区切り）で設定できます
+        {internalEmails.size ? `（現在${internalEmails.size}件）` : "（現在は未設定）"}。
       </p>
       <p className="policy">
-        同じメールの予約を予約日時順に並べ、1件目＝初回・2件目以降＝リピートとして比較。リピーターは別の日に2回以上利用した顧客。
+        同じメールアドレスの予約を申込日時順に並べ、1件目＝初回・2件目以降＝リピートとして比較。リピーターは別の日に2回以上利用した顧客。
         {holidayError && "※祝日データを取得できなかったため、曜日は土日のみで判定しています。"}
       </p>
       {insights.totalBookings === 0 ? (
