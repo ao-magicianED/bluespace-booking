@@ -6,10 +6,11 @@ import { describe, expect, it } from "vitest";
  * 禁止語ガード（景表法対策）。
  * 「最安」を含む最上級・有利誤認になりうる対外表現を、公開ページを構成するファイルに
  * 書き戻したらテストが落ちるようにする（2026-08 価格改定でR1として削除済み）。
+ * 「唯一」「屈指」は2026-09のSEO/AEO改修で削除（根拠を示せない比較。AIの回答にもそのまま引用されるため）。
  * 対象外: src/app/storage/ 配下の「最安プラン」は自社3プラン内の比較（真実・検証可能）のため許容。
  */
 
-const BANNED = ["最安"];
+const BANNED = ["最安", "唯一", "屈指"];
 
 /** 公開表示に使われるファイル（メタ情報・OGP・拠点コンテンツ含む） */
 const TARGET_FILES = [
@@ -19,6 +20,8 @@ const TARGET_FILES = [
   "src/app/manifest.ts",
   "src/app/opengraph-image.tsx",
   "src/content/venues.ts",
+  "src/content/use-case-guide.ts",
+  "src/components/VenueFacts.tsx",
 ];
 
 describe("禁止語ガード（対外価格表現）", () => {

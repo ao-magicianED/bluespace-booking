@@ -25,6 +25,12 @@ const nextConfig: NextConfig = {
         destination: "https://bluespacerental.com/:path*",
         permanent: true,
       },
+      {
+        // 旧WordPress時代のURL。Search Consoleにまだ表示が残っているため、現行のプライバシーポリシーへ恒久転送
+        source: "/privacy-policy",
+        destination: "/legal/privacy",
+        permanent: true,
+      },
     ];
   },
   async headers() {

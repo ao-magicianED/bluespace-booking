@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import StorageInquiryForm from "@/components/StorageInquiryForm";
 import StorageStickyCta from "@/components/StorageStickyCta";
+import { CORPORATE_URL } from "@/lib/site-url";
 
 export const dynamic = "force-static";
 
@@ -180,7 +181,7 @@ const JSON_LD = {
   provider: {
     "@type": "Organization",
     name: "ブルーステージ合同会社",
-    url: "https://bluestage-lcc.com",
+    url: CORPORATE_URL,
   },
 };
 
@@ -612,7 +613,7 @@ export default function StorageShirokaneTakanawaPage() {
               <dd>約15㎡（約9畳）／完全個室・1社専用</dd>
               <dt>運営会社</dt>
               <dd>
-                <a href="https://bluestage-lcc.com" target="_blank" rel="noopener noreferrer">
+                <a href={CORPORATE_URL} target="_blank" rel="noopener noreferrer">
                   ブルーステージ合同会社
                 </a>
               </dd>

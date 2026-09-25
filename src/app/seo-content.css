@@ -1,0 +1,148 @@
+/*
+ * SEO/AEO改修（2026-09）で追加した表示部品のスタイル。
+ * globals.css と分けているのは、並行する別PRとの競合を避けるため（値は globals.css の変数を使う）。
+ */
+
+/* ヘッダーのブランド表記「ブルースペース 公式予約」 */
+.brand .brand-sub {
+  font-size: 0.78rem;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-left: 0.3rem;
+}
+
+/* パンくず（拠点ページ上部） */
+.breadcrumb {
+  font-size: 0.82rem;
+  color: var(--gray-text);
+  margin: -0.8rem 0 1rem;
+}
+.breadcrumb a {
+  color: var(--navy-500);
+}
+
+/* スペース基本情報 */
+.venue-facts-table th {
+  width: 26%;
+  white-space: nowrap;
+}
+@media (max-width: 540px) {
+  .venue-facts-table th,
+  .venue-facts-table td {
+    display: block;
+    width: 100%;
+    white-space: normal;
+  }
+  .venue-facts-table th {
+    border-bottom: none;
+    padding-bottom: 0.3rem;
+  }
+  .venue-facts-table td {
+    border-top: none;
+    padding-top: 0.2rem;
+  }
+}
+
+/* 拠点ページFAQの「全拠点共通のご利用案内」見出し */
+.faq-common-title {
+  margin: 1.8rem 0 0.6rem;
+  font-size: 1rem;
+  color: var(--navy-700);
+}
+
+/* トップ: 拠点の比較表（横に長いので枠の中だけ横スクロール） */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 10px;
+}
+.compare-table {
+  min-width: 760px;
+}
+.compare-table th,
+.compare-table td {
+  width: auto;
+  font-size: 0.85rem;
+}
+.compare-table thead th {
+  background: var(--navy-900);
+  color: #fff;
+  white-space: nowrap;
+}
+.compare-table tbody th[scope="row"] {
+  white-space: nowrap;
+}
+.compare-table .compare-area-row th {
+  background: var(--navy-50);
+  color: var(--navy-900);
+  font-weight: 700;
+}
+
+/* トップ: 用途から探す */
+.use-case-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.9rem;
+}
+.use-case-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+.use-case-item dt {
+  font-weight: 700;
+  color: var(--navy-900);
+  margin-bottom: 0.35rem;
+}
+.use-case-item dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.use-case-venues a {
+  color: var(--navy-500);
+  font-weight: 600;
+}
+
+/* フッター: 拠点リンク */
+.footer-venues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.6rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.2);
+}
+.footer-venue-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.footer-venue-area-name {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.footer-venue-area a {
+  color: #cbd5e1;
+}
+
+/* トップH1: 語句の途中で改行しない。スマホでは1行目に「東京のレンタルスペース・」が収まる文字サイズにする */
+.nowrap-phrase {
+  display: inline-block;
+}
+.home-hero h1 {
+  font-size: clamp(1.5rem, 6.2vw, 2.7rem);
+}
+
+/*
+ * トップの装飾（.home-hero::before の right:-2rem）がスマホでページ幅を16pxはみ出し、
+ * 画面全体が横にスクロールしていた（2026-09-25 本番で確認・今回の改修前からの不具合）。
+ * clip は hidden と違いスクロール領域を作らないため、縦方向や sticky 要素に影響しない
+ */
+.home-hero {
+  overflow-x: clip;
+}

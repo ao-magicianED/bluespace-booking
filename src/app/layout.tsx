@@ -3,7 +3,12 @@ import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import AuthNav from "@/components/AuthNav";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import JsonLd from "@/components/JsonLd";
+import { VENUE_AREAS, getVenueContent } from "@/content/venues";
+import { CORPORATE_URL } from "@/lib/site-url";
+import { buildOrganizationJsonLd } from "@/lib/structured-data";
 import "./globals.css";
+import "./seo-content.css";
 
 const notoSansJP = Noto_Sans_JP({
   subsets: ["latin"],
@@ -33,7 +38,7 @@ export const metadata: Metadata = {
   // 申告してしまい、Search Console で「代替ページ（適切なcanonicalタグあり）」になる。
   // トップページの canonical は src/app/page.tsx 側で自己参照として指定する。
   openGraph: {
-    siteName: "ブルースペース公式予約",
+    siteName: "ブルースペース",
     locale: "ja_JP",
     type: "website",
     url: SITE,
@@ -54,8 +59,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <header className="site-header">
           <div className="container header-inner">
+            {/* 表示名は「ブルースペース」に統一（WebSite構造化データ・GBP・og:site_nameと一致させる） */}
             <Link href="/" className="brand">
-              ブルーステージ レンタルスペース予約
+              ブルースペース <span className="brand-sub">公式予約</span>
             </Link>
             <nav className="header-nav">
               <Link href="/">拠点一覧</Link>
@@ -67,18 +73,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="container main">{children}</main>
         <footer className="site-footer">
           <div className="container footer-inner">
+            {/* 全ページから各拠点へ直接リンク（拠点ページへの内部リンクを増やし、エリアと拠点の関係を伝える） */}
+            <nav className="footer-venues" aria-label="拠点一覧">
+              {VENUE_AREAS.map((a) => (
+                <div key={a.area} className="footer-venue-area">
+                  <span className="footer-venue-area-name">{a.area}</span>
+                  {a.slugs.map((slug) => {
+                    const c = getVenueContent(slug);
+                    if (!c) return null;
+                    return (
+                      <Link key={slug} href={`/${slug}`}>
+                        {c.name.replace(/^ブルースペース/, "")}（{c.station.split(" / ")[0]}）
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
+            </nav>
             <nav className="footer-nav">
               <Link href="/contact">お問い合わせ</Link>
               <Link href="/legal/terms">利用規約</Link>
               <Link href="/legal/privacy">プライバシーポリシー</Link>
               <Link href="/legal/tokushoho">特定商取引法に基づく表記</Link>
-              <a href="https://bluestage-lcc.com" target="_blank" rel="noopener noreferrer">
+              <a href={CORPORATE_URL} target="_blank" rel="noopener noreferrer">
                 運営会社（ブルーステージ合同会社）
               </a>
             </nav>
             <p>© ブルーステージ合同会社</p>
           </div>
         </footer>
+        {/* 運営会社（全ページ共通）。拠点の LocalBusiness は parentOrganization の @id でここを参照する */}
+        <JsonLd data={buildOrganizationJsonLd(SITE)} />
         <GoogleAnalytics />
       </body>
     </html>

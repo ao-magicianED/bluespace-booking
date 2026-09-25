@@ -10,16 +10,20 @@ import { resolveTier } from "@/lib/entry-tier";
 import { resolveDayPricing, resolveDayPricingBatch } from "@/lib/price-bands";
 import { minBandPrice } from "@/lib/pricing";
 import { todayJst } from "@/lib/slots";
-import { getVenueContent } from "@/content/venues";
+import { COMMON_FAQS, getVenueContent } from "@/content/venues";
 import BookingGrid from "@/components/BookingGrid";
 import AvailabilityDigest from "@/components/AvailabilityDigest";
 import PhotoGallery from "@/components/PhotoGallery";
 import PriceBandTable from "@/components/PriceBandTable";
 import FloatingNav from "@/components/FloatingNav";
+import JsonLd from "@/components/JsonLd";
+import VenueFacts from "@/components/VenueFacts";
 import ReviewSection from "@/components/ReviewSection";
 import { aggregateReviews } from "@/lib/reviews";
 import { getPublishedReviews } from "@/lib/reviews-db";
 import { describePolicy } from "@/lib/cancellation";
+import { CORPORATE_URL } from "@/lib/site-url";
+import { buildBreadcrumbJsonLd, buildFaqPageJsonLd, buildVenueJsonLd } from "@/lib/structured-data";
 import type { Venue, VenueOption } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -71,10 +75,11 @@ export async function generateMetadata({
       title,
       description,
       url: `${SITE}/${slug}`,
-      siteName: "ブルースペース公式予約",
+      siteName: "ブルースペース",
       locale: "ja_JP",
       type: "website",
-      images: [{ url: `${SITE}${content.photos.hero}`, width: 1200, height: 630 }],
+      // 実寸は拠点ごとに異なる（800×600〜1600×1200）ため width/height は宣言しない
+      images: [{ url: `${SITE}${content.photos.hero}`, alt: content.name }],
     },
   };
 }
@@ -140,8 +145,13 @@ export default async function VenuePage({
   const galleryToShow =
     galleryCategories.length > 0 ? galleryCategories : (content?.photos.categories ?? []);
 
-  // FAQ: DBに拠点別FAQが設定されていればそれを使う（管理画面で編集可）
-  const dbFaqs = (venue.faqs ?? null) as { q: string; a: string }[] | null;
+  // FAQ: DBに拠点別FAQが設定されていればそれを使う（管理画面で編集可）。無ければコード内の拠点固有FAQ。
+  // 全拠点共通の案内（COMMON_FAQS）は別枠で表示のみ（FAQPageはトップだけに付けて重複させない）
+  // DB側に共通FAQと同じ質問が入っていても、下の「共通のご利用案内」と重複表示・重複マークアップしない
+  const commonQuestions = new Set(COMMON_FAQS.map((f) => f.q));
+  const dbFaqs = ((venue.faqs ?? null) as { q: string; a: string }[] | null)?.filter(
+    (f) => !commonQuestions.has(f.q)
+  );
   const effectiveFaqs = dbFaqs && dbFaqs.length > 0 ? dbFaqs : (content?.faqs ?? []);
   const otherVenues = (othersResult.data ?? []) as {
     id: string;
@@ -180,91 +190,40 @@ export default async function VenuePage({
     ? [...bandPricing.weekday, ...bandPricing.holiday].map((b) => b.hourlyPrice)
     : null;
 
-  // 構造化データ（LocalBusiness + パンくず）。名称・住所はGoogleビジネスプロフィールと一致させる
+  // 構造化データ（LocalBusiness + パンくず + 拠点固有FAQ）。名称・住所はGoogleビジネスプロフィールと一致させる。
+  // 組み立て方針は src/lib/structured-data.ts を参照（自社レビューの aggregateRating は付けない）
+  const priceRange = allBandPrices
+    ? `¥${Math.min(...allBandPrices).toLocaleString()}〜¥${Math.max(...allBandPrices).toLocaleString()}/時間`
+    : `¥${venue.hourly_price.toLocaleString()}〜¥${(venue.holiday_hourly_price ?? venue.hourly_price).toLocaleString()}/時間`;
   const jsonLd = content
     ? [
-        {
-          "@context": "https://schema.org",
-          "@type": "LocalBusiness",
-          "@id": `${SITE}/${slug}#business`,
-          name: content.name,
-          description: content.catchCopy,
-          url: `${SITE}/${slug}`,
-          image: `${SITE}${content.photos.hero}`,
-          address: {
-            "@type": "PostalAddress",
-            postalCode: content.postalCode,
-            addressRegion: "東京都",
-            addressLocality: content.addressLocality,
-            streetAddress: content.address.replace(/^東京都.+?区/, ""),
-            addressCountry: "JP",
-          },
-          ...(content.geo
-            ? {
-                geo: {
-                  "@type": "GeoCoordinates",
-                  latitude: content.geo.lat,
-                  longitude: content.geo.lng,
-                },
-              }
-            : {}),
-          openingHoursSpecification: {
-            "@type": "OpeningHoursSpecification",
-            dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-            opens: "00:00",
-            closes: "23:59",
-          },
-          priceRange: allBandPrices
-            ? `¥${Math.min(...allBandPrices).toLocaleString()}〜¥${Math.max(...allBandPrices).toLocaleString()}/時間`
-            : `¥${venue.hourly_price.toLocaleString()}〜¥${(venue.holiday_hourly_price ?? venue.hourly_price).toLocaleString()}/時間`,
-          // 実利用者レビューが1件以上あるときだけ星評価を検索結果に出す（AggregateRating）
-          ...(reviewAggregate.count > 0
-            ? {
-                aggregateRating: {
-                  "@type": "AggregateRating",
-                  ratingValue: reviewAggregate.average,
-                  reviewCount: reviewAggregate.count,
-                  bestRating: 5,
-                  worstRating: 1,
-                },
-              }
-            : {}),
-          parentOrganization: {
-            "@type": "Organization",
-            name: "ブルーステージ合同会社",
-            url: "https://bluestage-lcc.com",
-          },
-        },
-        {
-          "@context": "https://schema.org",
-          "@type": "BreadcrumbList",
-          itemListElement: [
-            { "@type": "ListItem", position: 1, name: "ブルースペース", item: SITE },
-            { "@type": "ListItem", position: 2, name: content.name, item: `${SITE}/${slug}` },
-          ],
-        },
-        {
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          mainEntity: effectiveFaqs.map((f) => ({
-            "@type": "Question",
-            name: f.q,
-            acceptedAnswer: { "@type": "Answer", text: f.a },
-          })),
-        },
+        buildVenueJsonLd({
+          site: SITE,
+          content,
+          priceRange,
+          openHour: venue.open_hour,
+          closeHour: venue.close_hour,
+          extraImages: galleryToShow.flatMap((c) => c.images.slice(0, 1)).slice(0, 2).map((i) => i.src),
+        }),
+        buildBreadcrumbJsonLd(SITE, [
+          { name: "ブルースペース", path: "" },
+          { name: content.name, path: `/${slug}` },
+        ]),
+        buildFaqPageJsonLd(effectiveFaqs),
       ]
     : [];
 
   return (
     <>
       {jsonLd.map((obj, i) => (
-        <script
-          key={i}
-          type="application/ld+json"
-          // FAQ等の管理者入力に </script> が混ざってもページが壊れない/XSSにならないよう < をエスケープ
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(obj).replace(/</g, "\\u003c") }}
-        />
+        <JsonLd key={i} data={obj} />
       ))}
+
+      <nav className="breadcrumb" aria-label="パンくずリスト">
+        <Link href="/">ブルースペース</Link>
+        <span aria-hidden="true"> › </span>
+        <span aria-current="page">{venue.name}</span>
+      </nav>
 
       <div className={slug === "shirokane-takanawa" ? "booking-hero-row" : ""}>
         <div className="booking-header">
@@ -335,6 +294,8 @@ export default async function VenuePage({
       <AvailabilityDigest availability={initial} variant="banner" />
 
       {galleryToShow.length > 0 && <PhotoGallery categories={galleryToShow} />}
+
+      {content && <VenueFacts venue={venue} content={content} pricing={bandPricing} />}
 
       {content && (
         <section className="venue-section">
@@ -465,10 +426,19 @@ export default async function VenuePage({
             staticReviews={content.reviews}
           />
 
-          <section className="venue-section">
+          <section className="venue-section" id="faq">
             <h2>よくある質問</h2>
             <div className="faq-list">
               {effectiveFaqs.map((f) => (
+                <details key={f.q} className="faq-item">
+                  <summary>{f.q}</summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
+            <h3 className="faq-common-title">全拠点共通のご利用案内</h3>
+            <div className="faq-list">
+              {COMMON_FAQS.map((f) => (
                 <details key={f.q} className="faq-item">
                   <summary>{f.q}</summary>
                   <p>{f.a}</p>
@@ -493,7 +463,7 @@ export default async function VenuePage({
               長期・定期利用や法人でのご利用は{" "}
               <Link href={`/contact?type=longterm&venue=${venue.slug}`}>お問い合わせフォーム</Link>{" "}
               からお気軽にご相談ください（例: 月3回の定期利用のお見積もり）。 運営:{" "}
-              <Link href="https://bluestage-lcc.com" target="_blank" rel="noopener noreferrer">
+              <Link href={CORPORATE_URL} target="_blank" rel="noopener noreferrer">
                 ブルーステージ合同会社
               </Link>
             </p>

@@ -175,7 +175,7 @@ export default function AvailabilityDigest({
         })}
       </ul>
       <p className="av-week-note policy">
-        ※ 表示は{availability.days.length}日分のビルド時点の目安です。本日は現在時刻以降の空き枠のみ表示。
+        ※ 表示は{availability.days.length}日分のページ表示時点の目安です。本日は現在時刻以降の空き枠のみ表示。
         最新の空き状況と確実なご予約は下の予約カレンダーでご確認ください。
       </p>
     </div>

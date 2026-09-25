@@ -56,7 +56,7 @@ export default function FaqEditor({
       <p className="policy">
         {custom
           ? "この拠点はカスタムFAQを表示中です。"
-          : "現在は全拠点共通のデフォルトFAQを表示中です。保存するとこの拠点だけ内容を上書きできます。"}
+          : "現在はこの拠点のデフォルトFAQ（コード内の拠点固有FAQ）を表示中です。保存すると内容を上書きできます。全拠点共通のご利用案内は拠点ページに別枠で自動表示されます。"}
       </p>
       {faqs.map((f, i) => (
         <div key={i} className="faq-edit-row">
